@@ -69,6 +69,11 @@ CreditTypeUsedWillBeDeactivated=This credit type is used in existing movements o
 ErrorCodeAlreadyExists=The code '%s' already exists. Please use a unique code.
 ExportCSV=Export CSV
 RecordsDeleted=%s record(s) deleted
+RecordCreated=Record created successfully
+RecordModified=Record modified successfully
+RecordDeleted=Record deleted successfully
+BatchOperationCompleted=%d attribution(s) created successfully
+ImportCompleted=%d attribution(s) imported successfully
 
 #
 # Setup page
@@ -93,6 +98,23 @@ MaxAttributionAmount=Max amount per attribution
 MaxAttributionAmountDesc=0 = no limit
 AllowNegativeAttribution=Allow negative amounts
 AllowNegativeAttributionDesc=Permits debit attributions (negative values)
+
+#
+# Maintenance tools
+#
+CreditManagerTools=Maintenance tools
+Tool=Tool
+CreditManagerRecalculateBalances=Recalculate balances
+CreditManagerRecalculateBalancesDesc=Rebuilds the balance table from all movements. Use if you suspect data integrity issues or after manual database intervention.
+CreditManagerConfirmRecalculateBalances=Are you sure you want to recalculate all balances? This operation is irreversible and will delete all existing balances before rebuilding them.
+CreditManagerBalancesRecalculated=%d balance/type pair(s) successfully created
+CreditManagerBalancesRecalculatedWithErrors=%d pair(s) created, %d error(s) encountered
+CreditManagerConsistencyCheck=Check consistency
+CreditManagerConsistencyCheckDesc=Analyzes data integrity: orphaned movements, unauthorized negative balances, invalid credit types.
+CreditManagerConsistencyCheckOK=Consistency check completed: no issues detected
+CreditManagerOrphanedMovements=%d orphaned movement(s) detected (no corresponding balance)
+CreditManagerNegativeBalances=%d negative balance(s) detected
+CreditManagerInvalidCreditTypes=%d movement(s) with invalid credit type(s)
 AllowNegativeBalance=Allow negative balance
 AllowNegativeBalanceDesc=Permits client balance to go below zero
 NotifyOnAttribution=Notify after attribution

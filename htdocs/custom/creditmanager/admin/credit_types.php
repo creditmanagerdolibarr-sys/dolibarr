@@ -49,6 +49,8 @@ if (!$res) {
 	die("Include of main fails");
 }
 
+global $db, $conf, $langs, $user;
+
 /** @var DoliDB $db */
 /** @var Conf $conf */
 /** @var Translate $langs */

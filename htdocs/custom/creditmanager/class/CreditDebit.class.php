@@ -13,35 +13,43 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
- * Contributor of this script: https://github.com/joelmpunga Joel MPUNGA
  */
 
 /**
- * \file       htdocs/custom/creditmanager/class/CreditDebit.class.php
- * \ingroup    creditmanager
- * \brief      Debit and refund logic for credits (timesheet integration)
+ *	\file       htdocs/custom/creditmanager/class/CreditDebit.class.php
+ *	\ingroup    creditmanager
+ *	\brief      Class for credit debit logic with validation
  */
 
 require_once DOL_DOCUMENT_ROOT.'/core/class/commonobject.class.php';
+dol_include_once('/creditmanager/class/CreditBalance.class.php');
+dol_include_once('/creditmanager/class/CreditMovement.class.php');
+dol_include_once('/creditmanager/class/CreditType.class.php');
 
 /**
- * Class to manage credit debit and refund operations
+ *	Class to manage credit debit operations
  */
 class CreditDebit
 {
-	/** @var DoliDB Database handler */
+	/**
+	 * @var DoliDB Database handler
+	 */
 	public $db;
 
-	/** @var string Error message */
-	public $error = '';
+	/**
+	 * @var string Error message
+	 */
+	public $error;
 
-	/** @var array Error messages */
+	/**
+	 * @var array<string> Errors
+	 */
 	public $errors = array();
 
 	/**
-	 * Constructor
+	 *	Constructor
 	 *
-	 * @param DoliDB $db Database handler
+	 *	@param	DoliDB	$db		Database handler
 	 */
 	public function __construct(DoliDB $db)
 	{
@@ -49,147 +57,288 @@ class CreditDebit
 	}
 
 	/**
-	 * Refund credits for a timesheet that was previously debited.
-	 * Finds the debit movement linked to this timesheet and creates an inverse (credit) movement.
+	 *	Debit credits from client balance
 	 *
-	 * @param int $fk_timesheet Ficheinter (timesheet) ID
-	 * @return int <0 if KO, >0 if OK, 0 if nothing to do (not debited or no credit columns)
+	 *	@param	int		$fk_soc			Client ID
+	 *	@param	int		$fk_credit_type	Credit type ID
+	 *	@param	float	$amount			Amount to debit
+	 *	@param	int		$fk_timesheet	Timesheet ID
+	 *	@param	string	$description	Description
+	 *	@return	int						Movement ID if OK, <0 if KO
 	 */
-	public function refundCredits($fk_timesheet)
+	public function debitCredits($fk_soc, $fk_credit_type, $amount, $fk_timesheet = 0, $description = '')
 	{
-		global $conf, $user;
+		global $user;
 
-		$fk_timesheet = (int) $fk_timesheet;
-		if ($fk_timesheet <= 0) {
-			$this->error = 'Invalid timesheet id';
+		if ($amount <= 0) {
+			$this->error = 'Amount must be positive';
 			return -1;
 		}
 
-		// Check if llx_fichinter has credit columns (Phase 2 extension)
-		$table = MAIN_DB_PREFIX . 'fichinter';
-		$res = $this->db->query("SHOW COLUMNS FROM " . $table . " LIKE 'credit_status'");
-		if (!$res || $this->db->num_rows($res) == 0) {
-			dol_syslog(__CLASS__ . '::refundCredits - credit_status column not found, skipping');
-			return 0;
-		}
-		$this->db->free($res);
-
-		// Find the debit movement for this timesheet
-		$sql = "SELECT rowid, fk_soc, fk_credit_type, amount, balance_after";
-		$sql .= " FROM " . MAIN_DB_PREFIX . "credits_movements";
-		$sql .= " WHERE fk_timesheet = " . $fk_timesheet;
-		$sql .= " AND amount < 0"; // Debit = negative amount
-		$sql .= " AND entity = " . ((int) $conf->entity);
-
-		$res = $this->db->query($sql);
-		if (!$res) {
-			$this->error = $this->db->lasterror();
-			return -1;
-		}
-
-		$debitMovement = $this->db->fetch_object($res);
-		$this->db->free($res);
-
-		if (!$debitMovement) {
-			dol_syslog(__CLASS__ . '::refundCredits - No debit movement found for timesheet ' . $fk_timesheet);
-			return 0; // Nothing to refund
-		}
-
-		$socid = (int) $debitMovement->fk_soc;
-		$creditTypeId = (int) $debitMovement->fk_credit_type;
-		$refundAmount = abs((float) $debitMovement->amount);
-		$fkParentMovement = (int) $debitMovement->rowid;
-
-		if ($refundAmount <= 0 || $socid <= 0 || $creditTypeId <= 0) {
-			$this->error = 'Invalid debit movement data';
-			return -1;
+		if (!$this->validateDebit($fk_soc, $fk_credit_type, $amount, $fk_timesheet)) {
+			return -2;
 		}
 
 		$this->db->begin();
 
-		try {
-			// Update balance: add back the refunded amount
-			$sqlBal = "SELECT rowid, balance FROM " . MAIN_DB_PREFIX . "credits_balance";
-			$sqlBal .= " WHERE fk_soc = " . $socid;
-			$sqlBal .= " AND fk_credit_type = " . $creditTypeId;
-			$sqlBal .= " AND entity = " . ((int) $conf->entity);
-
-			$resBal = $this->db->query($sqlBal);
-			if (!$resBal) {
-				$this->db->rollback();
-				$this->error = $this->db->lasterror();
-				return -1;
-			}
-
-			$objBal = $this->db->fetch_object($resBal);
-			$this->db->free($resBal);
-
-			if (!$objBal) {
-				// Create balance row if needed
-				$newBalance = $refundAmount;
-				$sqlIns = "INSERT INTO " . MAIN_DB_PREFIX . "credits_balance (entity, fk_soc, fk_credit_type, balance, tms)";
-				$sqlIns .= " VALUES (" . ((int) $conf->entity) . ", " . $socid . ", " . $creditTypeId . ", " . price2num($newBalance, 'MT') . ", CURRENT_TIMESTAMP)";
-				if (!$this->db->query($sqlIns)) {
-					$this->db->rollback();
-					$this->error = $this->db->lasterror();
-					return -1;
-				}
-			} else {
-				$newBalance = (float) $objBal->balance + $refundAmount;
-				$sqlUpd = "UPDATE " . MAIN_DB_PREFIX . "credits_balance";
-				$sqlUpd .= " SET balance = " . price2num($newBalance, 'MT') . ", tms = CURRENT_TIMESTAMP";
-				$sqlUpd .= " WHERE rowid = " . ((int) $objBal->rowid);
-				if (!$this->db->query($sqlUpd)) {
-					$this->db->rollback();
-					$this->error = $this->db->lasterror();
-					return -1;
-				}
-			}
-
-			// Create refund movement (credit = positive amount)
-			$description = 'Remboursement - Ficheinter #' . $fk_timesheet;
-			$sqlMov = "INSERT INTO " . MAIN_DB_PREFIX . "credits_movements";
-			$sqlMov .= " (entity, fk_soc, fk_credit_type, date_movement, amount, balance_after, type_movement, description,";
-			$sqlMov .= " fk_timesheet, fk_invoice, fk_attribution, fk_parent_movement, fk_user_creat, tms)";
-			$sqlMov .= " VALUES (";
-			$sqlMov .= (int) $conf->entity . ", ";
-			$sqlMov .= $socid . ", ";
-			$sqlMov .= $creditTypeId . ", ";
-			$sqlMov .= "'" . $this->db->idate(dol_now()) . "', ";
-			$sqlMov .= price2num($refundAmount, 'MT') . ", ";
-			$sqlMov .= price2num($newBalance, 'MT') . ", ";
-			$sqlMov .= "'REFUND', ";
-			$sqlMov .= "'" . $this->db->escape($description) . "', ";
-			$sqlMov .= $fk_timesheet . ", ";
-			$sqlMov .= "NULL, NULL, ";
-			$sqlMov .= $fkParentMovement . ", ";
-			$sqlMov .= ((int) $user->id) . ", ";
-			$sqlMov .= "CURRENT_TIMESTAMP)";
-
-			if (!$this->db->query($sqlMov)) {
-				$this->db->rollback();
-				$this->error = $this->db->lasterror();
-				return -1;
-			}
-
-			// Update timesheet: clear debit fields and set status back to APPROVED or DRAFT
-			$resCol = $this->db->query("SHOW COLUMNS FROM " . MAIN_DB_PREFIX . "fichinter LIKE 'credit_debit_reference'");
-			if ($resCol && $this->db->num_rows($resCol) > 0) {
-				$this->db->free($resCol);
-				$sqlFich = "UPDATE " . MAIN_DB_PREFIX . "fichinter";
-				$sqlFich .= " SET credit_debit_reference = NULL, credit_debit_date = NULL, credit_debit_amount = NULL";
-				$sqlFich .= ", credit_status = 'APPROVED'"; // Back to approved, not debited
-				$sqlFich .= " WHERE rowid = " . $fk_timesheet;
-				$this->db->query($sqlFich); // Best effort
-			}
-
-			$this->db->commit();
-			dol_syslog(__CLASS__ . '::refundCredits - Refunded ' . $refundAmount . ' for timesheet ' . $fk_timesheet);
-			return 1;
-		} catch (Exception $e) {
+		$balance = new CreditBalance($this->db);
+		$result = $balance->updateBalance($fk_soc, $fk_credit_type, -$amount, $user);
+		if ($result < 0) {
+			$this->error = $balance->error;
 			$this->db->rollback();
-			$this->error = $e->getMessage();
+			return -3;
+		}
+
+		$movement = new CreditMovement($this->db);
+		$movement->fk_soc = $fk_soc;
+		$movement->fk_credit_type = $fk_credit_type;
+		$movement->amount = -$amount;
+		$movement->type_movement = 'DEBIT';
+		$movement->description = $description;
+		$movement->fk_timesheet = $fk_timesheet > 0 ? $fk_timesheet : null;
+		$movement->date_movement = dol_now();
+
+		$movementId = $movement->create($user);
+		if ($movementId < 0) {
+			$this->error = $movement->error;
+			$this->db->rollback();
+			return -4;
+		}
+
+		$this->db->commit();
+		return $movementId;
+	}
+
+	/**
+	 *	Debit credits from timesheet
+	 *
+	 *	@param	int		$fk_timesheet	Timesheet ID
+	 *	@return	int						Movement ID if OK, <0 if KO
+	 */
+	public function debitCreditsFromTimesheet($fk_timesheet)
+	{
+		require_once DOL_DOCUMENT_ROOT.'/fichinter/class/fichinter.class.php';
+
+		$fichinter = new Fichinter($this->db);
+		$result = $fichinter->fetch($fk_timesheet);
+		if ($result <= 0) {
+			$this->error = 'Timesheet not found';
 			return -1;
 		}
+
+		if (empty($fichinter->fk_credit_type)) {
+			$this->error = 'Credit type not assigned';
+			return -2;
+		}
+
+		if ($fichinter->credit_status !== 'APPROVED') {
+			$this->error = 'Timesheet not approved';
+			return -3;
+		}
+
+		if (!empty($fichinter->credit_debit_reference)) {
+			$this->error = 'Timesheet already debited';
+			return -4;
+		}
+
+		$amount = $fichinter->duree / 3600;
+
+		$description = 'Débit timesheet '.$fichinter->ref;
+
+		$movementId = $this->debitCredits(
+			$fichinter->socid,
+			$fichinter->fk_credit_type,
+			$amount,
+			$fk_timesheet,
+			$description
+		);
+
+		if ($movementId > 0) {
+			$reference = 'DEB-'.date('Ymd').'-'.$movementId;
+
+			$sql = "UPDATE ".$this->db->prefix()."ficheinter SET";
+			$sql .= " credit_status = 'DEBITED',";
+			$sql .= " credit_debit_reference = '".$this->db->escape($reference)."',";
+			$sql .= " credit_debit_date = NOW(),";
+			$sql .= " credit_debit_amount = ".((float) $amount);
+			$sql .= " WHERE rowid = ".((int) $fk_timesheet);
+
+			if (!$this->db->query($sql)) {
+				$this->error = $this->db->lasterror();
+				return -5;
+			}
+		}
+
+		return $movementId;
+	}
+
+	/**
+	 *	Refund credits from timesheet
+	 *
+	 *	@param	int		$fk_timesheet	Timesheet ID
+	 *	@return	int						Movement ID if OK, <0 if KO
+	 */
+	public function refundCredits($fk_timesheet)
+	{
+		global $user;
+
+		require_once DOL_DOCUMENT_ROOT.'/fichinter/class/fichinter.class.php';
+
+		$fichinter = new Fichinter($this->db);
+		$result = $fichinter->fetch($fk_timesheet);
+		if ($result <= 0) {
+			$this->error = 'Timesheet not found';
+			return -1;
+		}
+
+		if ($fichinter->credit_status !== 'DEBITED') {
+			$this->error = 'Timesheet not debited';
+			return -2;
+		}
+
+		$sql = "SELECT rowid, amount FROM ".$this->db->prefix()."credits_movements";
+		$sql .= " WHERE fk_timesheet = ".((int) $fk_timesheet);
+		$sql .= " AND type_movement = 'DEBIT'";
+		$sql .= " ORDER BY rowid DESC LIMIT 1";
+
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return -3;
+		}
+
+		$obj = $this->db->fetch_object($resql);
+		$this->db->free($resql);
+
+		if (!$obj) {
+			$this->error = 'Debit movement not found';
+			return -4;
+		}
+
+		$parentMovementId = (int) $obj->rowid;
+		$refundAmount = abs((float) $obj->amount);
+
+		$this->db->begin();
+
+		$balance = new CreditBalance($this->db);
+		$result = $balance->updateBalance(
+			$fichinter->socid,
+			$fichinter->fk_credit_type,
+			$refundAmount,
+			$user
+		);
+		if ($result < 0) {
+			$this->error = $balance->error;
+			$this->db->rollback();
+			return -5;
+		}
+
+		$movement = new CreditMovement($this->db);
+		$movement->fk_soc = $fichinter->socid;
+		$movement->fk_credit_type = $fichinter->fk_credit_type;
+		$movement->amount = $refundAmount;
+		$movement->type_movement = 'REFUND';
+		$movement->description = 'Remboursement timesheet '.$fichinter->ref;
+		$movement->fk_timesheet = $fk_timesheet;
+		$movement->fk_parent_movement = $parentMovementId;
+		$movement->date_movement = dol_now();
+
+		$movementId = $movement->create($user);
+		if ($movementId < 0) {
+			$this->error = $movement->error;
+			$this->db->rollback();
+			return -6;
+		}
+
+		$sql = "UPDATE ".$this->db->prefix()."ficheinter SET";
+		$sql .= " credit_status = 'APPROVED',";
+		$sql .= " credit_debit_reference = NULL,";
+		$sql .= " credit_debit_date = NULL,";
+		$sql .= " credit_debit_amount = NULL";
+		$sql .= " WHERE rowid = ".((int) $fk_timesheet);
+
+		if (!$this->db->query($sql)) {
+			$this->error = $this->db->lasterror();
+			$this->db->rollback();
+			return -7;
+		}
+
+		$this->db->commit();
+		return $movementId;
+	}
+
+	/**
+	 *	Validate debit operation
+	 *
+	 *	@param	int		$fk_soc			Client ID
+	 *	@param	int		$fk_credit_type	Credit type ID
+	 *	@param	float	$amount			Amount to debit
+	 *	@param	int		$fk_timesheet	Timesheet ID
+	 *	@return	bool					true if valid, false otherwise
+	 */
+	private function validateDebit($fk_soc, $fk_credit_type, $amount, $fk_timesheet = 0)
+	{
+		require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
+		require_once DOL_DOCUMENT_ROOT.'/projet/class/project.class.php';
+
+		$societe = new Societe($this->db);
+		if ($societe->fetch($fk_soc) <= 0) {
+			$this->error = 'Client not found';
+			return false;
+		}
+
+		if ($societe->status == 0) {
+			$this->error = 'Client inactive';
+			return false;
+		}
+
+		$creditType = new CreditType($this->db);
+		if ($creditType->fetch($fk_credit_type) <= 0) {
+			$this->error = 'Credit type not found';
+			return false;
+		}
+
+		if ($creditType->active == 0) {
+			$this->error = 'Credit type inactive';
+			return false;
+		}
+
+		$balance = new CreditBalance($this->db);
+		if (!$balance->checkSufficientBalance($fk_soc, $fk_credit_type, $amount)) {
+			$this->error = 'Insufficient balance';
+			return false;
+		}
+
+		if ($fk_timesheet > 0) {
+			require_once DOL_DOCUMENT_ROOT.'/fichinter/class/fichinter.class.php';
+
+			$fichinter = new Fichinter($this->db);
+			if ($fichinter->fetch($fk_timesheet) <= 0) {
+				$this->error = 'Timesheet not found';
+				return false;
+			}
+
+			if ($fichinter->credit_status !== 'APPROVED') {
+				$this->error = 'Timesheet not approved';
+				return false;
+			}
+
+			if (empty($fichinter->fk_credit_type)) {
+				$this->error = 'Credit type not assigned to timesheet';
+				return false;
+			}
+
+			if ($fichinter->fk_projet > 0) {
+				$project = new Project($this->db);
+				if ($project->fetch($fichinter->fk_projet) > 0) {
+					if ($project->statut == Project::STATUS_CLOSED) {
+						$this->error = 'Project closed';
+						return false;
+					}
+				}
+			}
+		}
+
+		return true;
 	}
 }

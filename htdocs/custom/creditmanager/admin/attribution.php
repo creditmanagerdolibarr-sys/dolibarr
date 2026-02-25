@@ -33,8 +33,17 @@ require_once DOL_DOCUMENT_ROOT . '/core/lib/admin.lib.php';
 require_once DOL_DOCUMENT_ROOT . '/core/class/html.form.class.php';
 require_once DOL_DOCUMENT_ROOT . '/societe/class/societe.class.php';
 require_once DOL_DOCUMENT_ROOT . '/user/class/user.class.php';
-require_once DOL_DOCUMENT_ROOT . '/custom/creditmanager/class/CreditType.class.php';
+dol_include_once('/creditmanager/class/CreditType.class.php');
+dol_include_once('/creditmanager/class/CreditBalance.class.php');
+dol_include_once('/creditmanager/class/CreditMovement.class.php');
 dol_include_once('/creditmanager/lib/creditmanager.lib.php');
+
+global $db, $conf, $langs, $user;
+
+/** @var DoliDB $db */
+/** @var Conf $conf */
+/** @var Translate $langs */
+/** @var User $user */
 
 // Load translation files
 $langs->loadLangs(array('admin', 'errors', 'companies', 'creditmanager@creditmanager'));
@@ -87,147 +96,6 @@ define('CREDITMVT_TYPE_ATTRIBUTION_ADJUST', 'ATTRIBUTION_ADJUSTMENT');
 define('CREDITMVT_TYPE_ATTRIBUTION_CANCEL', 'ATTRIBUTION_CANCEL');
 
 
-/**
- * Helper: update balance for a client/type by a delta amount.
- *
- * @param int   $socid
- * @param int   $creditTypeId
- * @param float $delta
- * @return int <0 if KO, >0 if OK
- */
-function creditmanager_update_balance($socid, $creditTypeId, $delta)
-{
-    global $db, $conf;
-
-    $socid = (int) $socid;
-    $creditTypeId = (int) $creditTypeId;
-    $delta = (float) $delta;
-
-    if ($socid <= 0 || $creditTypeId <= 0) {
-        return -1;
-    }
-
-    $sql = 'SELECT rowid, balance';
-    $sql .= ' FROM ' . $db->prefix() . 'credits_balance';
-    $sql .= ' WHERE fk_soc = ' . $socid;
-    $sql .= ' AND fk_credit_type = ' . $creditTypeId;
-    $sql .= ' AND entity = ' . ((int) $conf->entity);
-
-    $res = $db->query($sql);
-    if (!$res) {
-        return -1;
-    }
-
-    $obj = $db->fetch_object($res);
-    $db->free($res);
-
-    if ($obj) {
-        $newBalance = (float) $obj->balance + $delta;
-        if ($newBalance < 0 && !getDolGlobalInt('CREDITMANAGER_ALLOW_NEGATIVE_BALANCE', 0)) {
-            return -2;
-        }
-        $sqlUpdate = 'UPDATE ' . $db->prefix() . 'credits_balance';
-        $sqlUpdate .= ' SET balance = ' . price2num($newBalance, 'MT');
-        $sqlUpdate .= ', tms = CURRENT_TIMESTAMP';
-        $sqlUpdate .= ' WHERE rowid = ' . ((int) $obj->rowid);
-
-        if (!$db->query($sqlUpdate)) {
-            return -1;
-        }
-    } else {
-        $sqlInsert = 'INSERT INTO ' . $db->prefix() . 'credits_balance (entity, fk_soc, fk_credit_type, balance, tms)';
-        $sqlInsert .= ' VALUES (' . ((int) $conf->entity) . ', ' . $socid . ', ' . $creditTypeId . ', ' . price2num($delta, 'MT') . ', CURRENT_TIMESTAMP)';
-        if (!$db->query($sqlInsert)) {
-            return -1;
-        }
-    }
-
-    return 1;
-}
-
-
-/**
- * Helper: create a movement row for an attribution-related operation.
- *
- * @param int    $socid
- * @param int    $creditTypeId
- * @param float  $amount
- * @param string $typeMovement
- * @param string $description
- * @param int    $fkAttribution
- * @return int   Movement rowid (<0 if KO)
- */
-function creditmanager_create_movement($socid, $creditTypeId, $amount, $typeMovement, $description, $fkAttribution = 0)
-{
-    global $db, $conf, $user;
-
-    $socid = (int) $socid;
-    $creditTypeId = (int) $creditTypeId;
-    $amount = (float) $amount;
-    $typeMovement = trim($typeMovement);
-    $description = trim($description);
-    $fkAttribution = (int) $fkAttribution;
-
-    if ($socid <= 0 || $creditTypeId <= 0 || $typeMovement === '') {
-        return -1;
-    }
-
-    // Compute balance_after by reusing current balance logic
-    $sqlBal = 'SELECT balance';
-    $sqlBal .= ' FROM ' . $db->prefix() . 'credits_balance';
-    $sqlBal .= ' WHERE fk_soc = ' . $socid;
-    $sqlBal .= ' AND fk_credit_type = ' . $creditTypeId;
-    $sqlBal .= ' AND entity = ' . ((int) $conf->entity);
-
-    $resBal = $db->query($sqlBal);
-    $balanceBefore = 0.0;
-    if ($resBal) {
-        $objBal = $db->fetch_object($resBal);
-        if ($objBal) {
-            $balanceBefore = (float) $objBal->balance;
-        }
-        $db->free($resBal);
-    }
-    $balanceAfter = $balanceBefore + $amount;
-
-    $sql = 'INSERT INTO ' . $db->prefix() . 'credits_movements (';
-    $sql .= 'entity, fk_soc, fk_credit_type, date_movement, amount, balance_after, type_movement, description,';
-    $sql .= ' fk_timesheet, fk_invoice, fk_attribution, fk_parent_movement, fk_user_creat, tms';
-    $sql .= ') VALUES (';
-    $sql .= (int) $conf->entity . ',';
-    $sql .= $socid . ',';
-    $sql .= $creditTypeId . ',';
-    $sql .= "'" . $db->idate(dol_now()) . "',";
-    $sql .= price2num($amount, 'MT') . ',';
-    $sql .= price2num($balanceAfter, 'MT') . ',';
-    $sql .= "'" . $db->escape($typeMovement) . "',";
-    $sql .= "'" . $db->escape($description) . "',";
-    $sql .= 'NULL,'; // fk_timesheet
-    $sql .= 'NULL,'; // fk_invoice
-    $sql .= ($fkAttribution > 0 ? $fkAttribution : 'NULL') . ',';
-    $sql .= 'NULL,'; // fk_parent_movement reserved for debit refunds
-    $sql .= (int) $user->id . ',';
-    $sql .= 'CURRENT_TIMESTAMP';
-    $sql .= ')';
-
-    if (!$db->query($sql)) {
-        return -1;
-    }
-
-    $id = $db->last_insert_id($db->prefix() . 'credits_movements');
-
-    // If this is the base attribution, we can set fk_attribution to self
-    if ($fkAttribution === 0 && $typeMovement === CREDITMVT_TYPE_ATTRIBUTION && $id > 0) {
-        $sqlUpd = 'UPDATE ' . $db->prefix() . 'credits_movements';
-        $sqlUpd .= ' SET fk_attribution = ' . (int) $id;
-        $sqlUpd .= ' WHERE rowid = ' . (int) $id;
-        $db->query($sqlUpd); // Best-effort, ignore failure here
-    }
-
-    return $id;
-}
-
-
 /*
  * Actions
  */
@@ -250,26 +118,11 @@ if ($action === 'add' && $user->rights->creditmanager->write) {
         }
 
         if (!$error) {
-            $db->begin();
-
-            // Update balance first
-            if (creditmanager_update_balance($socid, $credit_type_id, $amount) < 0) {
-                $error++;
-            }
-
-            // Create movement of type ATTRIBUTION
-            if (!$error) {
-                $movId = creditmanager_create_movement($socid, $credit_type_id, $amount, CREDITMVT_TYPE_ATTRIBUTION, $description, 0);
-                if ($movId < 0) {
-                    $error++;
-                }
-            }
-
-            if ($error) {
-                $db->rollback();
-                setEventMessages($langs->trans('Error'), null, 'errors');
+            $movement = new CreditMovement($db);
+            $movId = $movement->createAttribution($socid, $credit_type_id, $amount, $description, $user);
+            if ($movId < 0) {
+                setEventMessages($movement->error ? $movement->error : $langs->trans('Error'), null, 'errors');
             } else {
-                $db->commit();
                 setEventMessages($langs->trans('RecordSaved'), null, 'mesgs');
             }
         }
@@ -324,7 +177,9 @@ if ($action === 'update' && $user->rights->creditmanager->write && $attrid > 0) 
 
                 // If amount changed, log adjustment movement + update balance
                 if (!$error && abs($diff) > 0) {
-                    if (creditmanager_update_balance($socidAttr, $typeAttr, $diff) < 0) {
+                    $balance = new CreditBalance($db);
+                    $result = $balance->updateBalance($socidAttr, $typeAttr, $diff, $user);
+                    if ($result < 0) {
                         $error++;
                     }
                     if (!$error) {
@@ -332,14 +187,14 @@ if ($action === 'update' && $user->rights->creditmanager->write && $attrid > 0) 
                         if ($labelAdj === 'CreditManagerAttributionAdjustment') {
                             $labelAdj = 'Attribution adjustment';
                         }
-                        $movAdjId = creditmanager_create_movement(
-                            $socidAttr,
-                            $typeAttr,
-                            $diff,
-                            CREDITMVT_TYPE_ATTRIBUTION_ADJUST,
-                            $labelAdj,
-                            $attrid
-                        );
+                        $movement = new CreditMovement($db);
+                        $movement->fk_soc = $socidAttr;
+                        $movement->fk_credit_type = $typeAttr;
+                        $movement->amount = $diff;
+                        $movement->type_movement = CREDITMVT_TYPE_ATTRIBUTION_ADJUST;
+                        $movement->description = $labelAdj;
+                        $movement->fk_attribution = $attrid;
+                        $movAdjId = $movement->create($user);
                         if ($movAdjId < 0) {
                             $error++;
                         }
@@ -383,8 +238,9 @@ if ($action === 'confirm_delete' && $confirm === 'yes' && $user->rights->creditm
             $typeAttr = (int) $obj->fk_credit_type;
             $baseAmount = (float) $obj->amount;
 
-            // Inverse movement: debit equivalent
-            if (creditmanager_update_balance($socidAttr, $typeAttr, -$baseAmount) < 0) {
+            $balance = new CreditBalance($db);
+            $result = $balance->updateBalance($socidAttr, $typeAttr, -$baseAmount, $user);
+            if ($result < 0) {
                 $error++;
             }
             if (!$error) {
@@ -392,14 +248,14 @@ if ($action === 'confirm_delete' && $confirm === 'yes' && $user->rights->creditm
                 if ($labelCancel === 'CreditManagerAttributionCancel') {
                     $labelCancel = 'Attribution cancellation';
                 }
-                $movCancelId = creditmanager_create_movement(
-                    $socidAttr,
-                    $typeAttr,
-                    -$baseAmount,
-                    CREDITMVT_TYPE_ATTRIBUTION_CANCEL,
-                    $labelCancel,
-                    $attrid
-                );
+                $movement = new CreditMovement($db);
+                $movement->fk_soc = $socidAttr;
+                $movement->fk_credit_type = $typeAttr;
+                $movement->amount = -$baseAmount;
+                $movement->type_movement = CREDITMVT_TYPE_ATTRIBUTION_CANCEL;
+                $movement->description = $labelCancel;
+                $movement->fk_attribution = $attrid;
+                $movCancelId = $movement->create($user);
                 if ($movCancelId < 0) {
                     $error++;
                 }
@@ -430,38 +286,26 @@ if ($action === 'addbatch' && $user->rights->creditmanager->write) {
     if (empty($toselect) || $credit_type_id <= 0 || (!$allowNegative && $amount <= 0)) {
         setEventMessages($langs->trans('ErrorBadParameters'), null, 'errors');
     } else {
-        $db->begin();
-
+        $nbok = 0;
         foreach ($toselect as $socidBatch) {
             $socidBatch = (int) $socidBatch;
             if ($socidBatch <= 0) {
                 continue;
             }
 
-            if (creditmanager_update_balance($socidBatch, $credit_type_id, $amount) < 0) {
-                $error++;
-                break;
-            }
-            $movId = creditmanager_create_movement(
-                $socidBatch,
-                $credit_type_id,
-                $amount,
-                CREDITMVT_TYPE_ATTRIBUTION,
-                $description,
-                0
-            );
+            $movement = new CreditMovement($db);
+            $movId = $movement->createAttribution($socidBatch, $credit_type_id, $amount, $description, $user);
             if ($movId < 0) {
                 $error++;
                 break;
             }
+            $nbok++;
         }
 
         if ($error) {
-            $db->rollback();
             setEventMessages($langs->trans('Error'), null, 'errors');
         } else {
-            $db->commit();
-            setEventMessages($langs->trans('RecordSaved'), null, 'mesgs');
+            setEventMessages($langs->trans('BatchOperationCompleted', $nbok), null, 'mesgs');
         }
     }
     $action = '';
@@ -473,13 +317,12 @@ if ($action === 'importcsv' && $user->rights->creditmanager->write) {
         $importFile = $_FILES['importfile']['tmp_name'];
         $handle = fopen($importFile, 'r');
         if ($handle) {
-            $db->begin();
             $lineNum = 0;
+            $nbok = 0;
 
             $csvSep = getDolGlobalString('CREDITMANAGER_CSV_SEPARATOR', ';');
             while (($row = fgetcsv($handle, 0, $csvSep)) !== false) {
                 $lineNum++;
-                // Expect: socid;credit_type_code;amount;description
                 if (count($row) < 3) {
                     continue;
                 }
@@ -497,38 +340,26 @@ if ($action === 'importcsv' && $user->rights->creditmanager->write) {
                     continue;
                 }
 
-                // Resolve credit type by code
                 $creditType = new CreditType($db);
                 if ($creditType->fetch(0, $codeCsv) <= 0 || $creditType->id <= 0) {
                     continue;
                 }
 
-                if (creditmanager_update_balance($socidCsv, $creditType->id, $amountCsv) < 0) {
-                    $error++;
-                    break;
-                }
-                $movId = creditmanager_create_movement(
-                    $socidCsv,
-                    $creditType->id,
-                    $amountCsv,
-                    CREDITMVT_TYPE_ATTRIBUTION,
-                    $descCsv,
-                    0
-                );
+                $movement = new CreditMovement($db);
+                $movId = $movement->createAttribution($socidCsv, $creditType->id, $amountCsv, $descCsv, $user);
                 if ($movId < 0) {
                     $error++;
                     break;
                 }
+                $nbok++;
             }
 
             fclose($handle);
 
             if ($error) {
-                $db->rollback();
                 setEventMessages($langs->trans('Error'), null, 'errors');
             } else {
-                $db->commit();
-                setEventMessages($langs->trans('RecordSaved'), null, 'mesgs');
+                setEventMessages($langs->trans('ImportCompleted', $nbok), null, 'mesgs');
             }
         } else {
             setEventMessages($langs->trans('ErrorFailedToOpenFile'), null, 'errors');
@@ -867,7 +698,7 @@ print '</td>';
 
 // Filter user
 print '<td>';
-print $form->select_dolusers($search_user, 'search_user', 1, '', 0, '', '', 0, 0, 0, '', 0, '', 'maxwidth200');
+print $form->select_dolusers($search_user, 'search_user', 1, null, 0, '', '', 0, 0, 0, '', 0, '', 'maxwidth200');
 print '</td>';
 
 // Date from / to

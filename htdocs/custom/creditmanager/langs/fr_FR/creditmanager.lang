@@ -69,6 +69,11 @@ CreditTypeUsedWillBeDeactivated=Ce type de crédit est utilisé dans des mouveme
 ErrorCodeAlreadyExists=Le code '%s' existe déjà. Veuillez utiliser un code unique.
 ExportCSV=Exporter en CSV
 RecordsDeleted=%s enregistrement(s) supprimé(s)
+RecordCreated=Enregistrement créé avec succès
+RecordModified=Enregistrement modifié avec succès
+RecordDeleted=Enregistrement supprimé avec succès
+BatchOperationCompleted=%d attribution(s) créée(s) avec succès
+ImportCompleted=%d attribution(s) importée(s) avec succès
 
 #
 # Page paramètres
@@ -93,6 +98,23 @@ MaxAttributionAmount=Montant max par attribution
 MaxAttributionAmountDesc=0 = pas de limite
 AllowNegativeAttribution=Autoriser les montants négatifs
 AllowNegativeAttributionDesc=Permet les attributions en débit (valeurs négatives)
+
+#
+# Outils de maintenance
+#
+CreditManagerTools=Outils de maintenance
+Tool=Outil
+CreditManagerRecalculateBalances=Recalculer les soldes
+CreditManagerRecalculateBalancesDesc=Reconstruit la table des soldes à partir de tous les mouvements. À utiliser en cas de doute sur la cohérence des données ou après une intervention manuelle en base.
+CreditManagerConfirmRecalculateBalances=Êtes-vous sûr de vouloir recalculer tous les soldes ? Cette opération est irréversible et supprimera tous les soldes existants avant de les reconstruire.
+CreditManagerBalancesRecalculated=%d paire(s) solde/type créée(s) avec succès
+CreditManagerBalancesRecalculatedWithErrors=%d paire(s) créée(s), %d erreur(s) rencontrée(s)
+CreditManagerConsistencyCheck=Vérifier la cohérence
+CreditManagerConsistencyCheckDesc=Analyse l'intégrité des données : mouvements orphelins, soldes négatifs non autorisés, types de crédit invalides.
+CreditManagerConsistencyCheckOK=La vérification de cohérence est complète : aucun problème détecté
+CreditManagerOrphanedMovements=%d mouvement(s) orphelin(s) détecté(s) (sans solde correspondant)
+CreditManagerNegativeBalances=%d solde(s) négatif(s) détecté(s)
+CreditManagerInvalidCreditTypes=%d mouvement(s) avec type de crédit invalide(s)
 AllowNegativeBalance=Autoriser le solde négatif
 AllowNegativeBalanceDesc=Permet au solde client de descendre sous zéro
 NotifyOnAttribution=Notifier après attribution
