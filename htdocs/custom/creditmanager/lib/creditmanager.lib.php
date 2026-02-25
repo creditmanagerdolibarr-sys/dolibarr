@@ -50,6 +50,11 @@ function creditmanagerAdminPrepareHead()
 	$head[$h][2] = 'attribution';
 	$h++;
 
+	$head[$h][0] = dol_buildpath("/custom/creditmanager/admin/tools.php", 1);
+	$head[$h][1] = $langs->trans("CreditManagerTools");
+	$head[$h][2] = 'tools';
+	$h++;
+
 	complete_head_from_modules($conf, $langs, null, $head, $h, 'creditmanager');
 	complete_head_from_modules($conf, $langs, null, $head, $h, 'creditmanager', 'remove');
 
