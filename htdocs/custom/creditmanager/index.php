@@ -66,6 +66,13 @@ print '<tr class="liste_titre"><th colspan="2">'.$langs->trans("CreditManagerDas
 print '<tr class="oddeven"><td colspan="2" class="opacitymedium">';
 print $langs->trans("CreditManagerDashboardDescription");
 print '</td></tr>';
+if (creditmanagerCanApproveTimesheets($user) || creditmanagerCanManageAdmin($user)) {
+	print '<tr class="oddeven"><td colspan="2">';
+	print '<a class="button" href="'.dol_buildpath('/custom/creditmanager/dashboard/dashboard_pm.php', 1).'">';
+	print $langs->trans('CreditDashboardPmHomeLink');
+	print '</a>';
+	print '</td></tr>';
+}
 print '</table>';
 print '</div>';
 

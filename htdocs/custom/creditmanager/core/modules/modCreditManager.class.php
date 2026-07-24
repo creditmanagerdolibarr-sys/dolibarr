@@ -185,6 +185,23 @@ class modCreditManager extends DolibarrModules
 			'user'     => 2,
 		);
 
+		// Left menu - PM Dashboard
+		$this->menu[$r++] = array(
+			'fk_menu'  => 'fk_mainmenu=creditmanager',
+			'type'     => 'left',
+			'titre'    => 'CreditDashboardPmMenu',
+			'prefix'   => 'fas fa-tachometer-alt fa-fw paddingright pictofixedwidth',
+			'mainmenu' => 'creditmanager',
+			'leftmenu' => 'creditmanager_dashboard_pm',
+			'url'      => '/custom/creditmanager/dashboard/dashboard_pm.php',
+			'langs'    => 'creditmanager@creditmanager',
+			'position' => 1002,
+			'enabled'  => 'isModEnabled("creditmanager") && ($user->hasRight("creditmanager","timesheet_approve") || $user->hasRight("creditmanager","creditmanager_admin"))',
+			'perms'    => '1',
+			'target'   => '',
+			'user'     => 2,
+		);
+
 		require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/lib/creditmanager.lib.php';
 		$reportsMenuEnabled = creditmanagerFinancialMenuEnabledExpr();
 
