@@ -260,6 +260,7 @@ CreditReportDeleteView=Delete
 CreditReportDeleteViewConfirm=Delete this view?
 CreditReportApplyFilters=Filter
 CreditReportResetFilters=Reset
+CreditReportResetChartZoom=Reset zoom
 CreditReportSecondaryChart=Secondary chart
 CreditReportBudgetVsReal=Budget vs Real
 CreditReportDetailedMovements=Detailed movements
