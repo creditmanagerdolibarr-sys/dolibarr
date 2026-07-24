@@ -939,7 +939,9 @@ if (!empty($widgetPrefs['show_consumption'])) {
 		print '<option value="'.$k.'"'.($chart_group_by === $k ? ' selected' : '').'>'.$lbl.'</option>';
 	}
 	print '</select></td>';
-	print '<td class="opacitymedium">'.$langs->trans('CreditDashboardChartPeriodHint', dol_print_date($chartDateStart, 'day'), dol_print_date($chartDateEnd, 'day')).'</td>';
+	print '<td class="opacitymedium">'.$langs->trans('CreditDashboardChartPeriodHint', dol_print_date($chartDateStart, 'day'), dol_print_date($chartDateEnd, 'day'));
+	print '<br><button type="button" class="button small reposition" id="btnResetZoomPmConsumption" title="'.dol_escape_htmltag($langs->trans('CreditReportResetChartZoom')).'">'.$langs->trans('CreditReportResetChartZoom').'</button>';
+	print '</td>';
 	print '</tr>';
 	print '<tr class="oddeven"><td colspan="4"><canvas id="chartPmConsumption" height="160"></canvas></td></tr>';
 	print '</table></div>';
@@ -962,7 +964,16 @@ print '<script>
 	};
 	cfg.options.plugins.legend = cfg.options.plugins.legend || {};
 	cfg.options.plugins.legend.onClick = Chart.defaults.plugins.legend.onClick;
-	new Chart(document.getElementById("chartPmConsumption"), cfg);
+	var chartPm = new Chart(document.getElementById("chartPmConsumption"), cfg);
+	var btnReset = document.getElementById("btnResetZoomPmConsumption");
+	if (btnReset) {
+		btnReset.addEventListener("click", function(e) {
+			e.preventDefault();
+			if (typeof chartPm.resetZoom === "function") {
+				chartPm.resetZoom();
+			}
+		});
+	}
 })();
 </script>';
 

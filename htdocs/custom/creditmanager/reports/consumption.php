@@ -526,20 +526,26 @@ print '</table></div>';
 
 print '<div class="fichecenter"><div class="fichehalfleft"><div class="div-table-responsive-no-min">';
 print '<table class="noborder centpercent">';
-print '<tr class="liste_titre"><th>'.$langs->trans('CreditReportMainChart').'</th></tr>';
+print '<tr class="liste_titre"><th>'.$langs->trans('CreditReportMainChart');
+print ' <button type="button" class="button small reposition" id="btnResetZoomMain" title="'.dol_escape_htmltag($langs->trans('CreditReportResetChartZoom')).'">'.$langs->trans('CreditReportResetChartZoom').'</button>';
+print '</th></tr>';
 print '<tr class="oddeven"><td><canvas id="chartMain" height="160"></canvas></td></tr>';
 print '</table></div></div>';
 
 print '<div class="fichehalfright"><div class="div-table-responsive-no-min">';
 print '<table class="noborder centpercent">';
-print '<tr class="liste_titre"><th>'.$langs->trans('CreditReportSecondaryChart').'</th></tr>';
+print '<tr class="liste_titre"><th>'.$langs->trans('CreditReportSecondaryChart');
+print ' <button type="button" class="button small reposition" id="btnResetZoomForecast" title="'.dol_escape_htmltag($langs->trans('CreditReportResetChartZoom')).'">'.$langs->trans('CreditReportResetChartZoom').'</button>';
+print '</th></tr>';
 print '<tr class="oddeven"><td><canvas id="chartForecast" height="160"></canvas></td></tr>';
 print '</table></div></div></div>';
 
 print '<div class="clearboth"></div>';
 print '<div class="div-table-responsive-no-min marginbottom" style="margin-top: 12px; width: 100%;">';
 print '<table class="noborder centpercent">';
-print '<tr class="liste_titre"><th>'.$langs->trans('CreditReportBudgetVsReal').'</th></tr>';
+print '<tr class="liste_titre"><th>'.$langs->trans('CreditReportBudgetVsReal');
+print ' <button type="button" class="button small reposition" id="btnResetZoomBudget" title="'.dol_escape_htmltag($langs->trans('CreditReportResetChartZoom')).'">'.$langs->trans('CreditReportResetChartZoom').'</button>';
+print '</th></tr>';
 print '<tr class="oddeven"><td style="height: 340px; min-width: 200px;"><canvas id="chartBudget" height="320"></canvas></td></tr>';
 print '</table></div>';
 
@@ -599,6 +605,17 @@ print '<script>
 		zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: "xy" }
 	};
 
+	function bindResetZoom(btnId, chart) {
+		var btn = document.getElementById(btnId);
+		if (!btn || !chart) return;
+		btn.addEventListener("click", function(e) {
+			e.preventDefault();
+			if (typeof chart.resetZoom === "function") {
+				chart.resetZoom();
+			}
+		});
+	}
+
 	if (window.Chart) {
 		if (!mainCfg.options.plugins) mainCfg.options.plugins = {};
 		mainCfg.options.plugins.zoom = optionsZoom;
@@ -611,9 +628,13 @@ print '<script>
 		if (!budgetCfg.options.plugins) budgetCfg.options.plugins = {};
 		budgetCfg.options.plugins.zoom = optionsZoom;
 
-		new Chart(document.getElementById("chartMain"), mainCfg);
-		new Chart(document.getElementById("chartForecast"), forecastCfg);
-		new Chart(document.getElementById("chartBudget"), budgetCfg);
+		var chartMain = new Chart(document.getElementById("chartMain"), mainCfg);
+		var chartForecast = new Chart(document.getElementById("chartForecast"), forecastCfg);
+		var chartBudget = new Chart(document.getElementById("chartBudget"), budgetCfg);
+
+		bindResetZoom("btnResetZoomMain", chartMain);
+		bindResetZoom("btnResetZoomForecast", chartForecast);
+		bindResetZoom("btnResetZoomBudget", chartBudget);
 	}
 })();
 </script>';
