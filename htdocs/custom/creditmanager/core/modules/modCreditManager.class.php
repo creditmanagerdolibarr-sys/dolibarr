@@ -64,6 +64,11 @@ class modCreditManager extends DolibarrModules
 				'note' => 'Pending timesheets awaiting PM approval',
 				'enabledbydefaulton' => 'Home',
 			),
+			1 => array(
+				'file' => 'box_credit_alerts.php@creditmanager',
+				'note' => 'Clients with low credit balances (warning/critical)',
+				'enabledbydefaulton' => 'Home',
+			),
 		);
 
 		// Tabs for thirdparty (client card)
