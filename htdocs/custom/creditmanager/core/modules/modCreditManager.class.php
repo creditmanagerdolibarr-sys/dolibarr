@@ -58,7 +58,13 @@ class modCreditManager extends DolibarrModules
 
 		$this->const = array();
 
-		$this->boxes = array();
+		$this->boxes = array(
+			0 => array(
+				'file' => 'box_pending_timesheets.php@creditmanager',
+				'note' => 'Pending timesheets awaiting PM approval',
+				'enabledbydefaulton' => 'Home',
+			),
+		);
 
 		// Tabs for thirdparty (client card)
 		$this->tabs = array(
