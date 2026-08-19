@@ -1,0 +1,77 @@
+/* Credit Manager - client portal styles */
+
+.creditmanager-balance-total {
+	margin: 12px 0 16px;
+	font-size: 1.1em;
+}
+
+.creditmanager-balance-total-value {
+	font-size: 1.4em;
+}
+
+.creditmanager-balance-cards {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin-bottom: 18px;
+}
+
+.creditmanager-balance-card {
+	flex: 1 1 180px;
+	max-width: 260px;
+	padding: 14px 16px;
+	border: 1px solid #ddd;
+	border-left-width: 5px;
+	background: #fff;
+	box-sizing: border-box;
+}
+
+.creditmanager-card-safe {
+	border-left-color: #28a745;
+}
+
+.creditmanager-card-warning {
+	border-left-color: #f0ad4e;
+	background: #fffdf5;
+}
+
+.creditmanager-card-critical {
+	border-left-color: #dc3545;
+	background: #fff5f5;
+}
+
+.creditmanager-card-title {
+	font-weight: 700;
+	font-size: 1.05em;
+}
+
+.creditmanager-card-label {
+	font-size: 0.9em;
+	margin-bottom: 8px;
+}
+
+.creditmanager-card-balance {
+	font-size: 1.5em;
+	font-weight: 700;
+	margin: 6px 0;
+}
+
+.creditmanager-card-percent,
+.creditmanager-card-status {
+	font-size: 0.9em;
+	margin-top: 4px;
+}
+
+.creditmanager-card-critical .creditmanager-card-status {
+	color: #dc3545;
+	font-weight: 600;
+}
+
+.creditmanager-card-warning .creditmanager-card-status {
+	color: #c77c00;
+	font-weight: 600;
+}
+
+.creditmanager-card-safe .creditmanager-card-status {
+	color: #28a745;
+}

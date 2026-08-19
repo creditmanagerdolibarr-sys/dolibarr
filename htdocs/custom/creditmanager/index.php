@@ -40,7 +40,12 @@ creditmanagerEnsureLeftMenuFlat($db);
 
 $langs->loadLangs(array("creditmanager@creditmanager"));
 
-// Access control
+// Access control: internal read OR client portal
+if (creditmanagerCanAccessClientPortalPages($user) && (creditmanagerIsClientPortalUser($user) || !creditmanagerCanReadModule($user))) {
+	header('Location: '.dol_buildpath('/custom/creditmanager/client/balance.php', 1));
+	exit;
+}
+
 if (!creditmanagerCanReadModule($user)) {
 	accessforbidden();
 }
