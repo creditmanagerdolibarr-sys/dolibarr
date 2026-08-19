@@ -337,6 +337,121 @@ function creditmanagerIsClientPortalUser($user)
 }
 
 /**
+ * Whether client portal pages are enabled and the user may open them.
+ * Portal users need client_portal_read (+ socid). Admins can open for testing when a socid is provided.
+ *
+ * @param User $user
+ * @return bool
+ */
+function creditmanagerCanAccessClientPortalPages($user)
+{
+	if (!isModEnabled('creditmanager')) {
+		return false;
+	}
+	if (!getDolGlobalInt('CREDITMANAGER_ENABLE_CLIENT_PORTAL', 0)) {
+		return false;
+	}
+	if (creditmanagerIsClientPortalUser($user)) {
+		return true;
+	}
+	return creditmanagerCanManageAdmin($user);
+}
+
+/**
+ * HMAC signing key for temporary client balance share links.
+ *
+ * @return string
+ */
+function creditmanagerGetShareSigningKey()
+{
+	global $conf;
+
+	$salt = getDolGlobalString('MAIN_SECURITY_SALT', '');
+	if ($salt !== '') {
+		return $salt;
+	}
+	if (!empty($conf->file->instance_unique_id)) {
+		return (string) $conf->file->instance_unique_id;
+	}
+	return 'creditmanager-share';
+}
+
+/**
+ * Build a temporary share token for a client balance snapshot.
+ *
+ * @param int $socid
+ * @param int $ttlHours
+ * @return string
+ */
+function creditmanagerCreateBalanceShareToken($socid, $ttlHours = 48)
+{
+	$socid = (int) $socid;
+	$ttlHours = max(1, (int) $ttlHours);
+	$expiry = dol_now() + ($ttlHours * 3600);
+	$payload = $socid.'|'.$expiry;
+	$sig = hash_hmac('sha256', $payload, creditmanagerGetShareSigningKey());
+	return rtrim(strtr(base64_encode($payload.'|'.$sig), '+/', '-_'), '=');
+}
+
+/**
+ * Validate a share token and return socid, or 0 if invalid/expired.
+ *
+ * @param string $token
+ * @return int
+ */
+function creditmanagerValidateBalanceShareToken($token)
+{
+	$token = trim((string) $token);
+	if ($token === '') {
+		return 0;
+	}
+	$raw = base64_decode(strtr($token, '-_', '+/'), true);
+	if ($raw === false) {
+		return 0;
+	}
+	$parts = explode('|', $raw);
+	if (count($parts) !== 3) {
+		return 0;
+	}
+	$socid = (int) $parts[0];
+	$expiry = (int) $parts[1];
+	$sig = (string) $parts[2];
+	if ($socid <= 0 || $expiry < dol_now()) {
+		return 0;
+	}
+	$expected = hash_hmac('sha256', $socid.'|'.$expiry, creditmanagerGetShareSigningKey());
+	if (!hash_equals($expected, $sig)) {
+		return 0;
+	}
+	return $socid;
+}
+
+/**
+ * Status badge from remaining percent (critical <5, warning <20, else safe).
+ *
+ * @param float|null $percentRemaining
+ * @param float      $balance
+ * @return string safe|warning|critical
+ */
+function creditmanagerClientBalanceStatus($percentRemaining, $balance = 0.0)
+{
+	$absThreshold = (float) getDolGlobalString('CREDITMANAGER_LOW_BALANCE_THRESHOLD', '10');
+	if ($percentRemaining !== null) {
+		if ($percentRemaining < 5) {
+			return 'critical';
+		}
+		if ($percentRemaining < 20) {
+			return 'warning';
+		}
+		return 'safe';
+	}
+	if ($absThreshold > 0 && (float) $balance <= $absThreshold) {
+		return ((float) $balance <= ($absThreshold / 2)) ? 'critical' : 'warning';
+	}
+	return 'safe';
+}
+
+/**
  * PM / admin can approve submitted timesheets.
  *
  * @param User $user
@@ -414,12 +529,23 @@ function creditmanagerCanViewFinancialData($user)
 
 /**
  * Menu enabled expression for financial pages (balances, movements, reports).
+ * Includes portal rights (used by some shared checks / legacy menus).
  *
  * @return string
  */
 function creditmanagerFinancialMenuEnabledExpr()
 {
 	return 'isModEnabled("creditmanager") && ($user->hasRight("creditmanager","creditmanager_admin") || $user->hasRight("creditmanager","reports_export") || $user->hasRight("creditmanager","attribution_manage") || $user->hasRight("creditmanager","timesheet_approve") || $user->hasRight("creditmanager","timesheet_manual_debit") || $user->hasRight("creditmanager","client_portal_read") || $user->hasRight("creditmanager","creditmanager_client"))';
+}
+
+/**
+ * Left-menu enabled expression for internal financial pages only (not portal-only users).
+ *
+ * @return string
+ */
+function creditmanagerInternalFinancialMenuEnabledExpr()
+{
+	return 'isModEnabled("creditmanager") && ($user->hasRight("creditmanager","creditmanager_admin") || $user->hasRight("creditmanager","reports_export") || $user->hasRight("creditmanager","attribution_manage") || $user->hasRight("creditmanager","timesheet_approve") || $user->hasRight("creditmanager","timesheet_manual_debit"))';
 }
 
 /**

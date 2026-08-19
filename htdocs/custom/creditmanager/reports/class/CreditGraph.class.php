@@ -296,6 +296,124 @@ class CreditGraph
 	}
 
 	/**
+	 * Line chart of cumulative balance evolution over time (one series per credit type).
+	 *
+	 * @param array<int,array{date:string,type_code:string,balance:float}> $points Chronological points
+	 * @param array<int,string> $typeCodes Ordered type codes to include
+	 * @return array<string,mixed>
+	 */
+	public function buildBalanceEvolutionChart($points, $typeCodes = array())
+	{
+		$labels = array();
+		$series = array();
+		foreach ($typeCodes as $code) {
+			$series[$code] = array();
+		}
+
+		foreach ($points as $point) {
+			$date = $point['date'];
+			if (!in_array($date, $labels, true)) {
+				$labels[] = $date;
+			}
+		}
+
+		$running = array();
+		foreach ($typeCodes as $code) {
+			$running[$code] = 0.0;
+		}
+
+		$byDate = array();
+		foreach ($points as $point) {
+			$code = $point['type_code'];
+			if (!isset($series[$code])) {
+				continue;
+			}
+			$byDate[$point['date']][$code] = $this->roundAmount($point['balance']);
+		}
+
+		foreach ($labels as $date) {
+			foreach ($typeCodes as $code) {
+				if (isset($byDate[$date][$code])) {
+					$running[$code] = $byDate[$date][$code];
+				}
+				$series[$code][] = $running[$code];
+			}
+		}
+
+		$datasets = array();
+		$index = 0;
+		foreach ($typeCodes as $code) {
+			$color = $this->colorFromIndex($index);
+			$datasets[] = array(
+				'label' => $code,
+				'data' => $series[$code],
+				'backgroundColor' => $this->rgba($color, 0.15),
+				'borderColor' => $this->rgba($color, 1),
+				'borderWidth' => 2,
+				'fill' => false,
+				'tension' => 0.25,
+			);
+			$index++;
+		}
+
+		return array(
+			'type' => 'line',
+			'data' => array('labels' => $labels, 'datasets' => $datasets),
+			'options' => array(
+				'responsive' => true,
+				'plugins' => array(
+					'legend' => array('display' => true, 'position' => 'bottom'),
+					'tooltip' => array('mode' => 'index', 'intersect' => false),
+				),
+				'scales' => array(
+					'y' => array('beginAtZero' => true, 'title' => array('display' => true, 'text' => 'Hours')),
+				),
+			),
+		);
+	}
+
+	/**
+	 * Pie/doughnut of current balances by credit type.
+	 *
+	 * @param array<int,array{label:string,balance:float}> $rows
+	 * @return array<string,mixed>
+	 */
+	public function buildBalanceDistributionChart($rows)
+	{
+		$labels = array();
+		$data = array();
+		$colors = array();
+		$index = 0;
+		foreach ($rows as $row) {
+			$balance = $this->roundAmount($row['balance']);
+			if ($balance <= 0) {
+				continue;
+			}
+			$labels[] = $row['label'];
+			$data[] = $balance;
+			$colors[] = $this->rgba($this->colorFromIndex($index), 0.8);
+			$index++;
+		}
+
+		return array(
+			'type' => 'doughnut',
+			'data' => array(
+				'labels' => $labels,
+				'datasets' => array(
+					array(
+						'data' => $data,
+						'backgroundColor' => $colors,
+					),
+				),
+			),
+			'options' => array(
+				'responsive' => true,
+				'plugins' => array('legend' => array('position' => 'bottom')),
+			),
+		);
+	}
+
+	/**
 	 * @param array{0:int,1:int,2:int} $color
 	 * @param float $alpha
 	 * @return string

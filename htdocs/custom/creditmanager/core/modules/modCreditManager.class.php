@@ -46,6 +46,8 @@ class modCreditManager extends DolibarrModules
 				'data' => array('tasktimelist'),
 				'entity' => '0',
 			),
+			// Allow top/left menus of this module for external (client) users
+			'moduleforexternal' => 1,
 		);
 
 		$this->depends = array('modSociete', 'modProjet', 'modFicheinter', 'modContrat', 'modFacture');
@@ -162,7 +164,7 @@ class modCreditManager extends DolibarrModules
 		$r = 0;
 		$menuTopPrefix = 'fas fa-credit-card fa-fw pictofixedwidth';
 
-		// Top menu - appears in the main horizontal bar
+		// Top menu - appears in the main horizontal bar (internal + external portal users)
 		$this->menu[$r++] = array(
 			'fk_menu'  => '',
 			'type'     => 'top',
@@ -174,12 +176,12 @@ class modCreditManager extends DolibarrModules
 			'langs'    => 'creditmanager@creditmanager',
 			'position' => 100,
 			'enabled'  => 'isModEnabled("creditmanager")',
-			'perms'    => '1',
+			'perms'    => '$user->hasRight("creditmanager","read") || $user->hasRight("creditmanager","client_portal_read") || $user->hasRight("creditmanager","creditmanager_client") || $user->hasRight("creditmanager","creditmanager_admin")',
 			'target'   => '',
 			'user'     => 2,
 		);
 
-		// Left menu - Dashboard
+		// Left menu - Dashboard (internal)
 		$this->menu[$r++] = array(
 			'fk_menu'  => 'fk_mainmenu=creditmanager',
 			'type'     => 'left',
@@ -193,7 +195,7 @@ class modCreditManager extends DolibarrModules
 			'enabled'  => 'isModEnabled("creditmanager") && $user->hasRight("creditmanager","read")',
 			'perms'    => '1',
 			'target'   => '',
-			'user'     => 2,
+			'user'     => 0,
 		);
 
 		// Left menu - PM Dashboard
@@ -210,11 +212,28 @@ class modCreditManager extends DolibarrModules
 			'enabled'  => 'isModEnabled("creditmanager") && ($user->hasRight("creditmanager","timesheet_approve") || $user->hasRight("creditmanager","creditmanager_admin"))',
 			'perms'    => '1',
 			'target'   => '',
-			'user'     => 2,
+			'user'     => 0,
+		);
+
+		// Left menu - Client portal (external users only)
+		$this->menu[$r++] = array(
+			'fk_menu'  => 'fk_mainmenu=creditmanager',
+			'type'     => 'left',
+			'titre'    => 'CreditClientPortalMenu',
+			'prefix'   => 'fas fa-globe fa-fw paddingright pictofixedwidth',
+			'mainmenu' => 'creditmanager',
+			'leftmenu' => 'creditmanager_client_portal',
+			'url'      => '/custom/creditmanager/client/balance.php',
+			'langs'    => 'creditmanager@creditmanager',
+			'position' => 1003,
+			'enabled'  => 'isModEnabled("creditmanager") && getDolGlobalInt("CREDITMANAGER_ENABLE_CLIENT_PORTAL") && ($user->hasRight("creditmanager","client_portal_read") || $user->hasRight("creditmanager","creditmanager_client"))',
+			'perms'    => '1',
+			'target'   => '',
+			'user'     => 1,
 		);
 
 		require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/lib/creditmanager.lib.php';
-		$reportsMenuEnabled = creditmanagerFinancialMenuEnabledExpr();
+		$reportsMenuEnabled = creditmanagerInternalFinancialMenuEnabledExpr();
 
 		// Left menu - Balances
 		$this->menu[$r++] = array(
@@ -230,7 +249,7 @@ class modCreditManager extends DolibarrModules
 			'enabled'  => $reportsMenuEnabled,
 			'perms'    => '1',
 			'target'   => '',
-			'user'     => 2,
+			'user'     => 0,
 		);
 
 		// Left menu - Movements
@@ -247,7 +266,7 @@ class modCreditManager extends DolibarrModules
 			'enabled'  => $reportsMenuEnabled,
 			'perms'    => '1',
 			'target'   => '',
-			'user'     => 2,
+			'user'     => 0,
 		);
 
 		// Left menu - Consumption report
@@ -264,7 +283,7 @@ class modCreditManager extends DolibarrModules
 			'enabled'  => $reportsMenuEnabled,
 			'perms'    => '1',
 			'target'   => '',
-			'user'     => 2,
+			'user'     => 0,
 		);
 
 		// Left menu - Forecast report
@@ -281,7 +300,7 @@ class modCreditManager extends DolibarrModules
 			'enabled'  => $reportsMenuEnabled,
 			'perms'    => '1',
 			'target'   => '',
-			'user'     => 2,
+			'user'     => 0,
 		);
 
 		// Left menu - Budget vs real report
@@ -298,7 +317,7 @@ class modCreditManager extends DolibarrModules
 			'enabled'  => $reportsMenuEnabled,
 			'perms'    => '1',
 			'target'   => '',
-			'user'     => 2,
+			'user'     => 0,
 		);
 
 		// Left menu - Manual timesheet debit (MVP)
@@ -315,7 +334,7 @@ class modCreditManager extends DolibarrModules
 			'enabled'  => 'isModEnabled("creditmanager") && ($user->hasRight("creditmanager","timesheet_approve") || $user->hasRight("creditmanager","creditmanager_admin"))',
 			'perms'    => '1',
 			'target'   => '',
-			'user'     => 2,
+			'user'     => 0,
 		);
 
 		// Left menu - Manual timesheet debit (MVP)
@@ -332,7 +351,7 @@ class modCreditManager extends DolibarrModules
 			'enabled'  => 'isModEnabled("creditmanager") && ($user->hasRight("creditmanager","timesheet_manual_debit") || $user->hasRight("creditmanager","creditmanager_admin"))',
 			'perms'    => '1',
 			'target'   => '',
-			'user'     => 2,
+			'user'     => 0,
 		);
 
 		// Left menu - Alerts
@@ -349,7 +368,7 @@ class modCreditManager extends DolibarrModules
 			'enabled'  => $reportsMenuEnabled,
 			'perms'    => '1',
 			'target'   => '',
-			'user'     => 2,
+			'user'     => 0,
 		);
 
 		// Left menu - Admin section1 (separator)
@@ -366,7 +385,7 @@ class modCreditManager extends DolibarrModules
 			'enabled'  => 'isModEnabled("creditmanager")',
 			'perms'    => '$user->hasRight("creditmanager","read")',
 			'target'   => '',
-			'user'     => 2,
+			'user'     => 0,
 		);
 
 		// Left menu - Admin section (separator)

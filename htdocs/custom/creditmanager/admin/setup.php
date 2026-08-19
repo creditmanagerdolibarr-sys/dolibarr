@@ -108,6 +108,18 @@ if ($action == 'setparam' && creditmanagerCanManageAdmin($user)) {
 	$enable_portal = GETPOSTINT('CREDITMANAGER_ENABLE_CLIENT_PORTAL');
 	dolibarr_set_const($db, 'CREDITMANAGER_ENABLE_CLIENT_PORTAL', $enable_portal, 'chaine', 0, '', $conf->entity);
 
+	$allow_request = GETPOSTINT('CREDITMANAGER_ALLOW_CLIENT_CREDIT_REQUEST');
+	dolibarr_set_const($db, 'CREDITMANAGER_ALLOW_CLIENT_CREDIT_REQUEST', $allow_request, 'chaine', 0, '', $conf->entity);
+
+	$share_ttl = GETPOSTINT('CREDITMANAGER_CLIENT_SHARE_TTL_HOURS');
+	if ($share_ttl < 1) {
+		$share_ttl = 48;
+	}
+	dolibarr_set_const($db, 'CREDITMANAGER_CLIENT_SHARE_TTL_HOURS', $share_ttl, 'chaine', 0, '', $conf->entity);
+
+	$request_email = GETPOST('CREDITMANAGER_CREDIT_REQUEST_EMAIL', 'alphanohtml');
+	dolibarr_set_const($db, 'CREDITMANAGER_CREDIT_REQUEST_EMAIL', $request_email, 'chaine', 0, '', $conf->entity);
+
 	// CSV separator for import/export
 	$csv_sep = GETPOST('CREDITMANAGER_CSV_SEPARATOR', 'alphanohtml');
 	if (in_array($csv_sep, array(';', ',', '\t', '|'))) {
@@ -237,6 +249,33 @@ print '<td>';
 $enablePortal = getDolGlobalString('CREDITMANAGER_ENABLE_CLIENT_PORTAL', '0');
 print '<input type="checkbox" name="CREDITMANAGER_ENABLE_CLIENT_PORTAL" value="1"'.($enablePortal ? ' checked' : '').'>';
 print ' <span class="opacitymedium">'.$langs->trans("EnableClientPortalDesc").'</span>';
+print '</td>';
+print '</tr>';
+
+print '<tr class="oddeven">';
+print '<td>'.$langs->trans("CreditClientAllowRequest").'</td>';
+print '<td>';
+$allowRequest = getDolGlobalString('CREDITMANAGER_ALLOW_CLIENT_CREDIT_REQUEST', '0');
+print '<input type="checkbox" name="CREDITMANAGER_ALLOW_CLIENT_CREDIT_REQUEST" value="1"'.($allowRequest ? ' checked' : '').'>';
+print ' <span class="opacitymedium">'.$langs->trans("CreditClientAllowRequestDesc").'</span>';
+print '</td>';
+print '</tr>';
+
+print '<tr class="oddeven">';
+print '<td>'.$langs->trans("CreditClientShareTtlHours").'</td>';
+print '<td>';
+$shareTtl = getDolGlobalString('CREDITMANAGER_CLIENT_SHARE_TTL_HOURS', '48');
+print '<input type="number" name="CREDITMANAGER_CLIENT_SHARE_TTL_HOURS" value="'.dol_escape_htmltag($shareTtl).'" class="maxwidth100" min="1" max="720">';
+print ' <span class="opacitymedium">'.$langs->trans("CreditClientShareTtlHoursDesc").'</span>';
+print '</td>';
+print '</tr>';
+
+print '<tr class="oddeven">';
+print '<td>'.$langs->trans("CreditClientRequestEmail").'</td>';
+print '<td>';
+$requestEmail = getDolGlobalString('CREDITMANAGER_CREDIT_REQUEST_EMAIL', '');
+print '<input type="email" name="CREDITMANAGER_CREDIT_REQUEST_EMAIL" value="'.dol_escape_htmltag($requestEmail).'" class="minwidth300">';
+print ' <span class="opacitymedium">'.$langs->trans("CreditClientRequestEmailDesc").'</span>';
 print '</td>';
 print '</tr>';
 
