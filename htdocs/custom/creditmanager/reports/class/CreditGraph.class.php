@@ -414,6 +414,81 @@ class CreditGraph
 	}
 
 	/**
+	 * Doughnut credit vs debit movement volumes (absolute hours).
+	 *
+	 * @param float $creditTotal
+	 * @param float $debitTotal
+	 * @param string $creditLabel
+	 * @param string $debitLabel
+	 * @return array<string,mixed>
+	 */
+	public function buildMovementCreditDebitChart($creditTotal, $debitTotal, $creditLabel = 'Credit', $debitLabel = 'Debit')
+	{
+		return array(
+			'type' => 'doughnut',
+			'data' => array(
+				'labels' => array($creditLabel, $debitLabel),
+				'datasets' => array(
+					array(
+						'data' => array($this->roundAmount($creditTotal), $this->roundAmount($debitTotal)),
+						'backgroundColor' => array('rgba(40,167,69,0.8)', 'rgba(220,53,69,0.8)'),
+					),
+				),
+			),
+			'options' => array(
+				'responsive' => true,
+				'plugins' => array('legend' => array('position' => 'bottom')),
+			),
+		);
+	}
+
+	/**
+	 * Monthly credit/debit grouped bars.
+	 *
+	 * @param array<int,array{month:string,credit:float,debit:float}> $rows
+	 * @param string $creditLabel
+	 * @param string $debitLabel
+	 * @return array<string,mixed>
+	 */
+	public function buildMonthlyMovementsChart($rows, $creditLabel = 'Credit', $debitLabel = 'Debit')
+	{
+		$labels = array();
+		$credits = array();
+		$debits = array();
+		foreach ($rows as $row) {
+			$labels[] = $row['month'];
+			$credits[] = $this->roundAmount($row['credit']);
+			$debits[] = $this->roundAmount($row['debit']);
+		}
+
+		return array(
+			'type' => 'bar',
+			'data' => array(
+				'labels' => $labels,
+				'datasets' => array(
+					array(
+						'label' => $creditLabel,
+						'data' => $credits,
+						'backgroundColor' => 'rgba(40,167,69,0.7)',
+					),
+					array(
+						'label' => $debitLabel,
+						'data' => $debits,
+						'backgroundColor' => 'rgba(220,53,69,0.7)',
+					),
+				),
+			),
+			'options' => array(
+				'responsive' => true,
+				'plugins' => array('legend' => array('position' => 'bottom')),
+				'scales' => array(
+					'y' => array('beginAtZero' => true, 'title' => array('display' => true, 'text' => 'Hours')),
+				),
+			),
+		);
+	}
+
+	/**
 	 * @param array{0:int,1:int,2:int} $color
 	 * @param float $alpha
 	 * @return string
