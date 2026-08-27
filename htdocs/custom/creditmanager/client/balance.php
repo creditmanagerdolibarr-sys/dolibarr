@@ -469,6 +469,13 @@ if (!$isShareView) {
 
 // Actions
 print '<div class="tabsAction">';
+if (!$isShareView) {
+	$historyUrl = dol_buildpath('/custom/creditmanager/client/history.php', 1);
+	if (empty($user->socid)) {
+		$historyUrl .= '?socid='.((int) $socid);
+	}
+	print '<a class="butAction" href="'.dol_escape_htmltag($historyUrl).'">'.$langs->trans('CreditClientHistoryMenu').'</a>';
+}
 print '<a class="butAction" href="'.$_SERVER['PHP_SELF'].'?action=exportpdf&token='.$token;
 if (!$isShareView && empty($user->socid)) {
 	print '&socid='.((int) $socid);

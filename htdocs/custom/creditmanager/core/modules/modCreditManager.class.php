@@ -215,7 +215,7 @@ class modCreditManager extends DolibarrModules
 			'user'     => 0,
 		);
 
-		// Left menu - Client portal (external users only)
+		// Left menu - Client portal balance (external users only)
 		$this->menu[$r++] = array(
 			'fk_menu'  => 'fk_mainmenu=creditmanager',
 			'type'     => 'left',
@@ -226,6 +226,23 @@ class modCreditManager extends DolibarrModules
 			'url'      => '/custom/creditmanager/client/balance.php',
 			'langs'    => 'creditmanager@creditmanager',
 			'position' => 1003,
+			'enabled'  => 'isModEnabled("creditmanager") && getDolGlobalInt("CREDITMANAGER_ENABLE_CLIENT_PORTAL") && ($user->hasRight("creditmanager","client_portal_read") || $user->hasRight("creditmanager","creditmanager_client"))',
+			'perms'    => '1',
+			'target'   => '',
+			'user'     => 1,
+		);
+
+		// Left menu - Client portal history (external users only)
+		$this->menu[$r++] = array(
+			'fk_menu'  => 'fk_mainmenu=creditmanager',
+			'type'     => 'left',
+			'titre'    => 'CreditClientHistoryMenu',
+			'prefix'   => 'fas fa-history fa-fw paddingright pictofixedwidth',
+			'mainmenu' => 'creditmanager',
+			'leftmenu' => 'creditmanager_client_history',
+			'url'      => '/custom/creditmanager/client/history.php',
+			'langs'    => 'creditmanager@creditmanager',
+			'position' => 1004,
 			'enabled'  => 'isModEnabled("creditmanager") && getDolGlobalInt("CREDITMANAGER_ENABLE_CLIENT_PORTAL") && ($user->hasRight("creditmanager","client_portal_read") || $user->hasRight("creditmanager","creditmanager_client"))',
 			'perms'    => '1',
 			'target'   => '',
