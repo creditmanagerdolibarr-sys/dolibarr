@@ -43,7 +43,7 @@ class modCreditManager extends DolibarrModules
 		$this->module_parts = array(
 			'triggers' => 1,
 			'hooks' => array(
-				'data' => array('tasktimelist'),
+				'data' => array('tasktimelist', 'main'),
 				'entity' => '0',
 			),
 			// Allow top/left menus of this module for external (client) users
@@ -164,7 +164,7 @@ class modCreditManager extends DolibarrModules
 		$r = 0;
 		$menuTopPrefix = 'fas fa-credit-card fa-fw pictofixedwidth';
 
-		// Top menu - appears in the main horizontal bar (internal + external portal users)
+		// Top menu - internal users
 		$this->menu[$r++] = array(
 			'fk_menu'  => '',
 			'type'     => 'top',
@@ -176,9 +176,26 @@ class modCreditManager extends DolibarrModules
 			'langs'    => 'creditmanager@creditmanager',
 			'position' => 100,
 			'enabled'  => 'isModEnabled("creditmanager")',
-			'perms'    => '$user->hasRight("creditmanager","read") || $user->hasRight("creditmanager","client_portal_read") || $user->hasRight("creditmanager","creditmanager_client") || $user->hasRight("creditmanager","creditmanager_admin")',
+			'perms'    => '$user->hasRight("creditmanager","read") || $user->hasRight("creditmanager","creditmanager_admin")',
 			'target'   => '',
-			'user'     => 2,
+			'user'     => 0,
+		);
+
+		// Top menu - external portal ("My credits")
+		$this->menu[$r++] = array(
+			'fk_menu'  => '',
+			'type'     => 'top',
+			'titre'    => 'CreditClientMyCredits',
+			'prefix'   => $menuTopPrefix,
+			'mainmenu' => 'creditmanager',
+			'leftmenu' => '',
+			'url'      => '/custom/creditmanager/client/index.php',
+			'langs'    => 'creditmanager@creditmanager',
+			'position' => 101,
+			'enabled'  => 'isModEnabled("creditmanager") && getDolGlobalInt("CREDITMANAGER_ENABLE_CLIENT_PORTAL")',
+			'perms'    => '$user->hasRight("creditmanager","client_portal_read") || $user->hasRight("creditmanager","creditmanager_client")',
+			'target'   => '',
+			'user'     => 1,
 		);
 
 		// Left menu - Dashboard (internal)
@@ -215,24 +232,43 @@ class modCreditManager extends DolibarrModules
 			'user'     => 0,
 		);
 
-		// Left menu - Client portal balance (external users only)
+		$portalEnabledExpr = 'isModEnabled("creditmanager") && getDolGlobalInt("CREDITMANAGER_ENABLE_CLIENT_PORTAL") && ($user->hasRight("creditmanager","client_portal_read") || $user->hasRight("creditmanager","creditmanager_client"))';
+
+		// Left menu - Portal home "My credits"
 		$this->menu[$r++] = array(
 			'fk_menu'  => 'fk_mainmenu=creditmanager',
 			'type'     => 'left',
-			'titre'    => 'CreditClientPortalMenu',
-			'prefix'   => 'fas fa-globe fa-fw paddingright pictofixedwidth',
+			'titre'    => 'CreditClientMyCredits',
+			'prefix'   => 'fas fa-wallet fa-fw paddingright pictofixedwidth',
 			'mainmenu' => 'creditmanager',
-			'leftmenu' => 'creditmanager_client_portal',
-			'url'      => '/custom/creditmanager/client/balance.php',
+			'leftmenu' => 'creditmanager_client_home',
+			'url'      => '/custom/creditmanager/client/index.php',
 			'langs'    => 'creditmanager@creditmanager',
 			'position' => 1003,
-			'enabled'  => 'isModEnabled("creditmanager") && getDolGlobalInt("CREDITMANAGER_ENABLE_CLIENT_PORTAL") && ($user->hasRight("creditmanager","client_portal_read") || $user->hasRight("creditmanager","creditmanager_client"))',
+			'enabled'  => $portalEnabledExpr,
 			'perms'    => '1',
 			'target'   => '',
 			'user'     => 1,
 		);
 
-		// Left menu - Client portal history (external users only)
+		// Left menu - Current balance (badge injected by hook)
+		$this->menu[$r++] = array(
+			'fk_menu'  => 'fk_mainmenu=creditmanager',
+			'type'     => 'left',
+			'titre'    => 'CreditClientBalanceMenu',
+			'prefix'   => 'fas fa-balance-scale fa-fw paddingright pictofixedwidth',
+			'mainmenu' => 'creditmanager',
+			'leftmenu' => 'creditmanager_client_portal',
+			'url'      => '/custom/creditmanager/client/balance.php',
+			'langs'    => 'creditmanager@creditmanager',
+			'position' => 1004,
+			'enabled'  => $portalEnabledExpr,
+			'perms'    => '1',
+			'target'   => '',
+			'user'     => 1,
+		);
+
+		// Left menu - History
 		$this->menu[$r++] = array(
 			'fk_menu'  => 'fk_mainmenu=creditmanager',
 			'type'     => 'left',
@@ -242,8 +278,42 @@ class modCreditManager extends DolibarrModules
 			'leftmenu' => 'creditmanager_client_history',
 			'url'      => '/custom/creditmanager/client/history.php',
 			'langs'    => 'creditmanager@creditmanager',
-			'position' => 1004,
-			'enabled'  => 'isModEnabled("creditmanager") && getDolGlobalInt("CREDITMANAGER_ENABLE_CLIENT_PORTAL") && ($user->hasRight("creditmanager","client_portal_read") || $user->hasRight("creditmanager","creditmanager_client"))',
+			'position' => 1005,
+			'enabled'  => $portalEnabledExpr,
+			'perms'    => '1',
+			'target'   => '',
+			'user'     => 1,
+		);
+
+		// Left menu - Associated projects (optional)
+		$this->menu[$r++] = array(
+			'fk_menu'  => 'fk_mainmenu=creditmanager',
+			'type'     => 'left',
+			'titre'    => 'CreditClientProjectsMenu',
+			'prefix'   => 'fas fa-project-diagram fa-fw paddingright pictofixedwidth',
+			'mainmenu' => 'creditmanager',
+			'leftmenu' => 'creditmanager_client_projects',
+			'url'      => '/custom/creditmanager/client/projects.php',
+			'langs'    => 'creditmanager@creditmanager',
+			'position' => 1006,
+			'enabled'  => $portalEnabledExpr.' && getDolGlobalInt("CREDITMANAGER_CLIENT_SHOW_PROJECTS")',
+			'perms'    => '1',
+			'target'   => '',
+			'user'     => 1,
+		);
+
+		// Left menu - Credit requests (optional)
+		$this->menu[$r++] = array(
+			'fk_menu'  => 'fk_mainmenu=creditmanager',
+			'type'     => 'left',
+			'titre'    => 'CreditClientRequestsMenu',
+			'prefix'   => 'fas fa-hand-holding-usd fa-fw paddingright pictofixedwidth',
+			'mainmenu' => 'creditmanager',
+			'leftmenu' => 'creditmanager_client_requests',
+			'url'      => '/custom/creditmanager/client/balance.php#credit-request-form',
+			'langs'    => 'creditmanager@creditmanager',
+			'position' => 1007,
+			'enabled'  => $portalEnabledExpr.' && getDolGlobalInt("CREDITMANAGER_ALLOW_CLIENT_CREDIT_REQUEST")',
 			'perms'    => '1',
 			'target'   => '',
 			'user'     => 1,

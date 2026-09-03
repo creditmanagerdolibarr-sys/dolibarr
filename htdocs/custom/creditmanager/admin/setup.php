@@ -111,6 +111,9 @@ if ($action == 'setparam' && creditmanagerCanManageAdmin($user)) {
 	$allow_request = GETPOSTINT('CREDITMANAGER_ALLOW_CLIENT_CREDIT_REQUEST');
 	dolibarr_set_const($db, 'CREDITMANAGER_ALLOW_CLIENT_CREDIT_REQUEST', $allow_request, 'chaine', 0, '', $conf->entity);
 
+	$show_projects = GETPOSTINT('CREDITMANAGER_CLIENT_SHOW_PROJECTS');
+	dolibarr_set_const($db, 'CREDITMANAGER_CLIENT_SHOW_PROJECTS', $show_projects, 'chaine', 0, '', $conf->entity);
+
 	$share_ttl = GETPOSTINT('CREDITMANAGER_CLIENT_SHARE_TTL_HOURS');
 	if ($share_ttl < 1) {
 		$share_ttl = 48;
@@ -258,6 +261,15 @@ print '<td>';
 $allowRequest = getDolGlobalString('CREDITMANAGER_ALLOW_CLIENT_CREDIT_REQUEST', '0');
 print '<input type="checkbox" name="CREDITMANAGER_ALLOW_CLIENT_CREDIT_REQUEST" value="1"'.($allowRequest ? ' checked' : '').'>';
 print ' <span class="opacitymedium">'.$langs->trans("CreditClientAllowRequestDesc").'</span>';
+print '</td>';
+print '</tr>';
+
+print '<tr class="oddeven">';
+print '<td>'.$langs->trans("CreditClientShowProjects").'</td>';
+print '<td>';
+$showProjects = getDolGlobalString('CREDITMANAGER_CLIENT_SHOW_PROJECTS', '0');
+print '<input type="checkbox" name="CREDITMANAGER_CLIENT_SHOW_PROJECTS" value="1"'.($showProjects ? ' checked' : '').'>';
+print ' <span class="opacitymedium">'.$langs->trans("CreditClientShowProjectsDesc").'</span>';
 print '</td>';
 print '</tr>';
 

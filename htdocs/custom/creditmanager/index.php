@@ -42,7 +42,7 @@ $langs->loadLangs(array("creditmanager@creditmanager"));
 
 // Access control: internal read OR client portal
 if (creditmanagerCanAccessClientPortalPages($user) && (creditmanagerIsClientPortalUser($user) || !creditmanagerCanReadModule($user))) {
-	header('Location: '.dol_buildpath('/custom/creditmanager/client/balance.php', 1));
+	header('Location: '.dol_buildpath('/custom/creditmanager/client/index.php', 1));
 	exit;
 }
 

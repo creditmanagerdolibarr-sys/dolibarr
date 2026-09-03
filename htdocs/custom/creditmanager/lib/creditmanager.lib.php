@@ -452,6 +452,57 @@ function creditmanagerClientBalanceStatus($percentRemaining, $balance = 0.0)
 }
 
 /**
+ * Sum of active credit balances for a third party.
+ *
+ * @param DoliDB $db
+ * @param int    $fk_soc
+ * @return float
+ */
+function creditmanagerGetClientTotalBalance(DoliDB $db, $fk_soc)
+{
+	$fk_soc = (int) $fk_soc;
+	if ($fk_soc <= 0) {
+		return 0.0;
+	}
+
+	$total = 0.0;
+	$sql = "SELECT SUM(b.balance) as total_balance";
+	$sql .= " FROM ".$db->prefix()."credits_balance as b";
+	$sql .= " INNER JOIN ".$db->prefix()."credits_types as t ON t.rowid = b.fk_credit_type";
+	$sql .= " WHERE b.fk_soc = ".$fk_soc;
+	$sql .= " AND b.entity IN (".getEntity('credits_balance').")";
+	$sql .= " AND t.entity IN (".getEntity('credits_type').")";
+	$sql .= " AND t.active = 1";
+	$resql = $db->query($sql);
+	if ($resql) {
+		$obj = $db->fetch_object($resql);
+		if ($obj && $obj->total_balance !== null) {
+			$total = (float) $obj->total_balance;
+		}
+		$db->free($resql);
+	}
+	return $total;
+}
+
+/**
+ * HTML badge for a balance amount (used in portal menus / hub).
+ *
+ * @param float $amount
+ * @return string
+ */
+function creditmanagerFormatBalanceBadge($amount)
+{
+	$amount = (float) $amount;
+	$class = 'badge';
+	if ($amount <= 0) {
+		$class .= ' badge-danger';
+	} else {
+		$class .= ' badge-status4';
+	}
+	return ' <span class="'.$class.'">'.creditmanagerFormatAmount($amount).'</span>';
+}
+
+/**
  * PM / admin can approve submitted timesheets.
  *
  * @param User $user
