@@ -115,6 +115,59 @@ class ActionsCreditmanager extends CommonHookActions
 		return in_array('tasktimelist', $contexts, true);
 	}
 
+	/**
+	 * Inject balance badge into external portal left menu "Current balance".
+	 *
+	 * @param array $parameters
+	 * @param array $menu_array
+	 * @return int 1 = replace menu array
+	 */
+	public function menuLeftMenuItems($parameters, &$menu_array)
+	{
+		global $user, $langs;
+
+		require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/lib/creditmanager.lib.php';
+
+		if (empty($user->socid) || !creditmanagerIsClientPortalUser($user)) {
+			return 0;
+		}
+		if (empty($parameters['mainmenu']) || $parameters['mainmenu'] !== 'creditmanager') {
+			return 0;
+		}
+		if (!is_array($menu_array) || empty($menu_array)) {
+			return 0;
+		}
+
+		$langs->load('creditmanager@creditmanager');
+
+		$total = creditmanagerGetClientTotalBalance($this->db, (int) $user->socid);
+		$badge = creditmanagerFormatBalanceBadge($total);
+		$balanceLabel = $langs->trans('CreditClientBalanceMenu');
+		$myCreditsLabel = $langs->trans('CreditClientMyCredits');
+
+		foreach ($menu_array as $key => $entry) {
+			$url = isset($entry['url']) ? (string) $entry['url'] : '';
+			$titre = isset($entry['titre']) ? (string) $entry['titre'] : '';
+			$isBalanceEntry = (strpos($url, '/custom/creditmanager/client/balance.php') !== false)
+				&& (strpos($url, '#credit-request-form') === false);
+			$isHomeEntry = (strpos($url, '/custom/creditmanager/client/index.php') !== false);
+
+			if ($isBalanceEntry || $isHomeEntry) {
+				if (strpos($titre, 'badge') === false) {
+					$base = $isHomeEntry ? $myCreditsLabel : $balanceLabel;
+					// Keep existing translated title when present
+					if ($titre !== '' && $titre !== 'CreditClientBalanceMenu' && $titre !== 'CreditClientMyCredits') {
+						$base = $titre;
+					}
+					$menu_array[$key]['titre'] = $base.$badge;
+				}
+			}
+		}
+
+		$this->resArray = $menu_array;
+		return 1;
+	}
+
 	private function renderCreditTypeSelect($selectedId, $htmlName)
 	{
 		global $langs;
