@@ -416,6 +416,7 @@ CreditClientMovementDebit=Debit
 CreditClientAmountMin=Min amount
 CreditClientAmountMax=Max amount
 CreditClientStatus=Status
+CreditStatus=Credit status
 CreditClientStatusAll=All
 CreditClientStatusValidated=Validated
 CreditClientStatusPending=Pending

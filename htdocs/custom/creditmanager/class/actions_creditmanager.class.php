@@ -10,6 +10,8 @@
 require_once DOL_DOCUMENT_ROOT.'/core/class/commonhookactions.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.form.class.php';
 require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/class/CreditType.class.php';
+require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/class/CreditStatus.class.php';
+require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/class/CreditStatusTypesAndTimesheets.class.php';
 
 class ActionsCreditmanager extends CommonHookActions
 {
@@ -23,17 +25,7 @@ class ActionsCreditmanager extends CommonHookActions
 		$this->db = $db;
 	}
 
-	public function printFieldListSelect($parameters, &$object, &$action)
-	{
-		if (!$this->isTaskTimeListContext($parameters)) {
-			return 0;
-		}
-
-		$this->resprints = ', t.fk_credit_type, t.credit_status';
-		return 0;
-	}
-
-	/*public function printFieldListTitle($parameters, &$object, &$action)
+	public function printFieldListTitle($parameters, &$object, &$action)
 	{
 		global $langs;
 		$langs->load('creditmanager@creditmanager');
@@ -43,8 +35,9 @@ class ActionsCreditmanager extends CommonHookActions
 		}
 
 		$this->resprints = '<td class="liste_titre">'.$langs->trans('CreditType').'</td>';
+		$this->resprints .= '<td class="liste_titre">'.$langs->trans('CreditStatus').'</td>';
 		return 0;
-	}*/
+	}
 
 	public function printFieldListOption($parameters, &$object, &$action)
 	{
@@ -53,10 +46,11 @@ class ActionsCreditmanager extends CommonHookActions
 		}
 
 		$this->resprints = '<td class="liste_titre"></td>';
+		$this->resprints .= '<td class="liste_titre"></td>';
 		return 0;
 	}
 
-	/*public function printFieldListValue($parameters, &$object, &$action)
+	public function printFieldListValue($parameters, &$object, &$action)
 	{
 		global $langs;
 		$langs->load('creditmanager@creditmanager');
@@ -68,8 +62,31 @@ class ActionsCreditmanager extends CommonHookActions
 		$mode = isset($parameters['mode']) ? (string) $parameters['mode'] : '';
 		$timespent = isset($parameters['obj']) ? $parameters['obj'] : null;
 
+		$this->resprints = '';
+		if ($mode !== 'create' && !($action === 'editline' && GETPOSTINT('lineid') === (int) $timespent->rowid)) {
+			["fk_credits_status_shows" => $fk_credits_status_shows, "fk_credits_types_shows" => $fk_credits_types_shows] = $this->withTimespentIdReturnCorrecpondingCreditStatusAndTypes($timespent->rowid);
+			//credits types logics
+			if ($fk_credits_types_shows) {
+				$creditTypes = new CreditType($this->db);
+				$creditTypes->fetch($fk_credits_types_shows);
+				$this->resprints .= '<td class="nowraponall">'.$creditTypes->label.'</td>';
+			} else {
+				$this->resprints .= '<td class="nowraponall">EMPTY</td>';
+			}
+			// credit status affiche logics
+
+			if ($fk_credits_status_shows) {
+				$creditStatus = new CreditStatus($this->db);
+				$creditStatus->fetch($fk_credits_status_shows);
+				$this->resprints .= '<td class="nowraponall">'.$creditStatus->status_name.'</td>';
+			} else {
+				$this->resprints .= '<td class="nowraponall">EMPTY</td>';
+			}
+			
+		}
 		if ($mode === 'create') {
-			$this->resprints = '<td class="nowraponall">'.$this->renderCreditTypeSelect(GETPOSTINT('fk_credit_type'), 'fk_credit_type').'</td>';
+			$this->resprints = '<td class="nowraponall">'.$this->renderCreditTypeSelect(GETPOSTINT('fk_credits_types'), 'fk_credits_types').'</td>';
+			$this->resprints .= '<td class="nowraponall">'.$this->renderCreditStatusSelect(GETPOSTINT('fk_credits_status'), 'fk_credits_status').'</td>';
 			return 0;
 		}
 
@@ -79,7 +96,9 @@ class ActionsCreditmanager extends CommonHookActions
 		}
 
 		if ($action === 'editline' && GETPOSTINT('lineid') === (int) $timespent->rowid) {
-			$this->resprints = '<td class="nowraponall">'.$this->renderCreditTypeSelect(GETPOSTINT('fk_credit_type') ?: (int) $timespent->fk_credit_type, 'fk_credit_type').'</td>';
+			$correspondingData = $this->withTimespentIdReturnCorrecpondingCreditStatusAndTypes($timespent->rowid);
+			$this->resprints = '<td class="nowraponall">'.$this->renderCreditTypeSelect(GETPOSTINT('fk_credits_types')?: (int) $correspondingData["fk_credits_types_shows"], 'fk_credits_types').'</td>';
+			$this->resprints .= '<td class="nowraponall">'.$this->renderCreditStatusSelect($correspondingData["fk_credits_status_shows"], 'fk_credits_status').'</td>';
 			return 0;
 		}
 
@@ -100,10 +119,8 @@ class ActionsCreditmanager extends CommonHookActions
 			$label = '<span class="opacitymedium">'.$langs->trans('None').'</span>';
 		}
 
-		$status = !empty($timespent->credit_status) ? ' <span class="opacitymedium">('.dol_escape_htmltag($timespent->credit_status).')</span>' : '';
-		$this->resprints = '<td class="nowraponall">'.$label.$status.'</td>';
 		return 0;
-	}*/
+	}
 
 	private function isTaskTimeListContext($parameters)
 	{
@@ -133,5 +150,34 @@ class ActionsCreditmanager extends CommonHookActions
 
 		$form = new Form($this->db);
 		return $form->selectarray($htmlName, $options, $selectedId > 0 ? (string) $selectedId : '', 0, 0, 0, '', 0, 0, 0, '', 'minwidth150 maxwidth200');
+	}
+
+	private function renderCreditStatusSelect($selectedId, $htmlName)
+	{
+		global $langs;
+		$langs->load('creditmanager@creditmanager');
+
+		$credit = new CreditStatus($this->db);
+		$list = $credit->fetchAll();
+		if (!is_array($list)) {
+			return '<span class="opacitymedium">'.$langs->trans('NoRecordFound').'</span>';
+		}
+
+		$options = array('' => $langs->trans('SelectCreditStatus'));
+		foreach ($list as $item) {
+			$options[(string) $item->rowid] = $item->status_name;
+		}
+
+		$form = new Form($this->db);
+		return $form->selectarray($htmlName, $options, $selectedId > 0 ? (string) $selectedId : '', 0, 0, 0, '', 0, 0, 0, '', 'minwidth150 maxwidth200');
+	}
+
+	private function withTimespentIdReturnCorrecpondingCreditStatusAndTypes($rowid)
+	{
+		$creditTM = new CreditStatusTypesAndTimesheets($this->db);
+		$creditTM->fetch($rowid);
+		$fk_credits_status_shows = $creditTM->fk_credits_status ? (int) $creditTM->fk_credits_status : null;
+		$fk_credits_types_shows = $creditTM->fk_credits_types ? (int) $creditTM->fk_credits_types : null;
+		return ["fk_credits_status_shows" => $fk_credits_status_shows, "fk_credits_types_shows" => $fk_credits_types_shows];
 	}
 }
