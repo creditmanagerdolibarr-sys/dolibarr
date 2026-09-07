@@ -123,8 +123,6 @@ class TimeSpent extends CommonObject
 		'intervention_line_id' => array('type' => 'integer', 'label' => 'intervention_line_id', 'enabled' => 1, 'position' => 14, 'notnull' => 0, 'visible' => -1, 'default' => 'NULL',),
 		'datec' => array('type' => 'datetime', 'label' => 'datec', 'enabled' => 1, 'position' => 16, 'notnull' => 0, 'visible' => -1,),
 		'note' => array('type' => 'text', 'label' => 'note', 'enabled' => 1, 'position' => 18, 'notnull' => 0, 'visible' => -1,),
-		'fk_credit_type' => array('type' => 'integer', 'label' => 'fk_credit_type', 'enabled' => 1, 'position' => 19, 'notnull' => 0, 'visible' => -1,),
-		'credit_status' => array('type' => 'text', 'label' => 'credit_status', 'enabled' => 1, 'position' => 20, 'notnull' => 0, 'visible' => -1,),
 	);
 
 	/**
@@ -211,16 +209,6 @@ class TimeSpent extends CommonObject
 	 * @var string
 	 */
 	public $note;
-
-	/**
-	 * @var int
-	 */
-	public $fk_credit_type;
-
-	/**
-	 * @var string
-	 */
-	public $credit_status;
 	// END MODULEBUILDER PROPERTIES
 
 	/**

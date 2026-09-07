@@ -37,6 +37,7 @@ require '../../main.inc.php';
 require_once DOL_DOCUMENT_ROOT . '/projet/class/project.class.php';
 require_once DOL_DOCUMENT_ROOT . '/projet/class/task.class.php';
 require_once DOL_DOCUMENT_ROOT . '/compta/facture/class/facture.class.php';
+require_once DOL_DOCUMENT_ROOT . '/product/class/product.class.php';
 require_once DOL_DOCUMENT_ROOT . '/core/lib/project.lib.php';
 require_once DOL_DOCUMENT_ROOT . '/core/lib/date.lib.php';
 require_once DOL_DOCUMENT_ROOT . '/core/class/html.formother.class.php';
@@ -92,8 +93,6 @@ $search_date_endyear = GETPOSTINT('search_date_endyear');
 $search_date_start = dol_mktime(0, 0, 0, $search_date_startmonth, $search_date_startday, $search_date_startyear); // Use tzserver
 $search_date_end = dol_mktime(23, 59, 59, $search_date_endmonth, $search_date_endday, $search_date_endyear);
 $search_note = GETPOST('search_note', 'alpha');
-$search_credit_status = GETPOST('search_credit_status', 'alpha');
-$search_fk_credit_type = GETPOSTINT('search_fk_credit_type');
 $search_duration = GETPOST('search_duration', 'alpha');
 $search_task_ref = GETPOST('search_task_ref', 'alpha');
 $search_task_label = GETPOST('search_task_label', 'alpha');
@@ -131,27 +130,6 @@ $childids = $user->getAllChildIds(1);
 // Initialize a technical object to manage hooks of page. Note that conf->hooks_modules contains an array of hook context
 //$object = new TaskTime($db);
 $hookmanager->initHooks(array('projecttasktime', 'globalcard'));
-if (isModEnabled("creditmanager")) {
-	require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/class/html.formcreditmanager.class.php';
-	$formCreditType = new FormCreditTypes($db);
-	// Find the group of the user
-	$usergroup = new UserGroup($db);
-	$groupslist = $usergroup->listGroupsForUser($user->id, false);
-	$groupOfCurrentUser = [];
-	foreach($groupslist as $group) {
-		$groupOfCurrentUser[] = $group->nom;
-	}
-	if (in_array("Credit Manager - Staff",$groupOfCurrentUser)) {
-		$arrayOfCreditStatusOfTimeSpent = array("DRAFT"=>$langs->trans("DRAFT"), "SUBMITTED"=>$langs->trans("SUBMITTED"));
-	} elseif (in_array("Credit Manager - PM",$groupOfCurrentUser)) {
-		$arrayOfCreditStatusOfTimeSpent = array( "SUBMITTED"=>$langs->trans("SUBMITTED"), "APPROVED"=>$langs->trans("APPROVED"), "REJECTED"=>$langs->trans("REJECTED"));
-	} elseif (in_array("Credit Manager - Finance",$groupOfCurrentUser) || in_array("Credit Manager - Admin",$groupOfCurrentUser)) {
-		$arrayOfCreditStatusOfTimeSpent = array("DRAFT"=>$langs->trans("DRAFT"), "SUBMITTED"=>$langs->trans("SUBMITTED"), "APPROVED"=>$langs->trans("APPROVED"), "REJECTED"=>$langs->trans("REJECTED"));
-	} else {
-		$arrayOfCreditStatusOfTimeSpent = [];
-	}
-	$arrayOfCreditType = $formCreditType->select_credit_types_list('','','','','','','','','',true);
-}
 
 $object = new Task($db);
 $extrafields = new ExtraFields($db);
@@ -160,6 +138,8 @@ $projectstatic = new Project($db);
 // fetch optionals attributes and labels
 $extrafields->fetch_name_optionals_label($projectstatic->table_element);
 $extrafields->fetch_name_optionals_label($object->table_element);
+
+$search_array_options = $extrafields->getOptionalsFromPost($object->table_element, '', 'search_');
 
 // Load task
 if ($id > 0 || $ref) {
@@ -211,8 +191,6 @@ if (GETPOST('button_removefilter_x', 'alpha') || GETPOST('button_removefilter.x'
 	$search_month = '';
 	$search_year = '';
 	$search_note = '';
-	$search_credit_status = '';
-	$search_fk_credit_type = '';
 	$search_duration = '';
 	$search_date_startday = '';
 	$search_date_startmonth = '';
@@ -290,8 +268,6 @@ if ($action == 'addtimespent' && $user->hasRight('projet', 'time')) {
 				$object->timespent_fk_user = GETPOSTINT("userid");
 				$object->timespent_fk_product = GETPOSTINT("fk_product");
 
-				$object->timespent_fk_credit_type = GETPOSTINT("timespent_fk_credit_type");
-				$object->timespent_credit_status = GETPOST("timespent_credit_status");
 				$result = $object->addTimeSpent($user);
 
 				if ($result >= 0) {
@@ -326,10 +302,8 @@ if (($action == 'updateline' || $action == 'updatesplitline') && !$cancel && $us
 			$result = 0;
 
 			$object->fetch($id_temp, $ref);
-			
+
 			$object->timespent_note = GETPOST("timespent_note_line", "alphanohtml");
-			$object->timespent_credit_status = GETPOST("timespent_credit_status_line", "alphanohtml");
-			$object->timespent_fk_credit_type = GETPOSTINT("timespent_fk_credit_type_line");
 			$object->timespent_old_duration = GETPOSTINT("old_duration");
 			$object->timespent_duration = GETPOSTINT("new_durationhour") * 60 * 60; // We store duration in seconds
 			$object->timespent_duration += (GETPOSTINT("new_durationmin") ? GETPOSTINT('new_durationmin') : 0) * 60; // We store duration in seconds
@@ -344,8 +318,6 @@ if (($action == 'updateline' || $action == 'updatesplitline') && !$cancel && $us
 			$object->timespent_fk_product = GETPOSTINT("fk_product");
 			$object->timespent_invoiceid = GETPOSTINT("invoiceid");
 			$object->timespent_invoicelineid = GETPOSTINT("invoicelineid");
-			$object->timespent_fk_credit_type = GETPOSTINT("timespent_fk_credit_type");
-			$object->timespent_credit_status = GETPOST("timespent_credit_status");
 
 			$result = 0;
 			if (in_array($object->timespent_fk_user, $childids) || $user->hasRight('projet', 'all', 'creer')) {
@@ -361,18 +333,18 @@ if (($action == 'updateline' || $action == 'updatesplitline') && !$cancel && $us
 			$object->fetch($id, $ref);
 
 			$object->fetchTimeSpent(GETPOSTINT('lineid'));
-			$object->timespent_note = GETPOST("timespent_note_line", "alphanohtml");
-			$object->timespent_fk_credit_type = GETPOSTINT("timespent_fk_credit_type_line");
-			$object->timespent_credit_status = GETPOST("timespent_credit_status_line");
 
+			$object->timespent_note = GETPOST("timespent_note_line", "alphanohtml");
 			$object->timespent_old_duration = GETPOSTINT("old_duration");
 			$object->timespent_duration = GETPOSTINT("new_durationhour") * 60 * 60; // We store duration in seconds
 			$object->timespent_duration += (GETPOSTINT("new_durationmin") ? GETPOSTINT('new_durationmin') : 0) * 60; // We store duration in seconds
 			if (GETPOST("timelinehour") != '' && GETPOST("timelinehour") >= 0) {    // If hour was entered
-				$object->timespent_date = dol_mktime(GETPOSTINT("timelinehour"), GETPOSTINT("timelinemin"), 0, GETPOSTINT("timelinemonth"), GETPOSTINT("timelineday"), GETPOSTINT("timelineyear"));
+				$object->timespent_date = dol_mktime(12, 0, 0, GETPOSTINT("timelinemonth"), GETPOSTINT("timelineday"), GETPOSTINT("timelineyear"));
+				$object->timespent_datehour = dol_mktime(GETPOSTINT("timelinehour"), GETPOSTINT("timelinemin"), 0, GETPOSTINT("timelinemonth"), GETPOSTINT("timelineday"), GETPOSTINT("timelineyear"));
 				$object->timespent_withhour = 1;
 			} elseif (!empty($timespent_date)) {
 				$object->timespent_date = $timespent_date;
+				$object->timespent_datehour = $timespent_date;
 				$object->timespent_withhour = 0;
 			}
 			$object->timespent_fk_user = GETPOSTINT("userid_line");
@@ -599,8 +571,11 @@ if ($action == 'confirm_generateinvoice' && $user->hasRight('facture', 'creer'))
 							$idprodline = $fk_product;
 						}
 
-						// Add lines
-						$lineid = $tmpinvoice->addline($langs->trans("TimeSpentForInvoice", $username) . ' : ' . $qtyhourtext, $pu_htline, round($qtyhour / $prodDurationHours, 2), $txtvaline, $localtax1line, $localtax2line, ($idprodline > 0 ? $idprodline : 0), (float) $remiseproject);
+						// Add lines. Pass type=1 (service) explicitly so the invoice line is tagged
+						// as a service even when no product is bound to the time entry. Otherwise
+						// the default $type=0 leaks through and the PDF labels the operation as
+						// "Delivery of goods" instead of "Provision of services" (issue #34571).
+						$lineid = $tmpinvoice->addline($langs->trans("TimeSpentForInvoice").' - '.$username . ' : ' . $qtyhourtext, $pu_htline, round($qtyhour / $prodDurationHours, 2), $txtvaline, $localtax1line, $localtax2line, ($idprodline > 0 ? $idprodline : 0), (float) $remiseproject, '', '', 0, 0, 0, 'HT', 0, Product::TYPE_SERVICE);
 						if ($lineid < 0) {
 							$error++;
 							setEventMessages(null, $tmpinvoice->errors, 'errors');
@@ -648,7 +623,9 @@ if ($action == 'confirm_generateinvoice' && $user->hasRight('facture', 'creer'))
 					$arrayoftasks[$object->timespent_id]['fk_product'] = $object->timespent_fk_product;
 				}
 
+				$pu_ht_saved = $pu_ht;	// Save the base unit price (price of the selected product/service if any, 0 otherwise)
 				foreach ($arrayoftasks as $timespent_id => $value) {
+					$pu_ht = $pu_ht_saved;	// Reset for each line, so a line does not inherit the unit price computed for the previous one
 					$userid = $value['user'];
 					//$pu_ht = $value['timespent'] * $fuser->thm;
 
@@ -657,7 +634,9 @@ if ($action == 'confirm_generateinvoice' && $user->hasRight('facture', 'creer'))
 
 					// If no unit price known
 					if (empty($pu_ht)) {
-						$pu_ht = price2num($value['totalvaluetodivideby3600'] / 3600, 'MU');
+						if ($value['timespent']) {
+							$pu_ht = price2num(($value['totalvaluetodivideby3600'] / $value['timespent']), 'MU');
+						}
 					}
 
 					// Add lines
@@ -699,7 +678,11 @@ if ($action == 'confirm_generateinvoice' && $user->hasRight('facture', 'creer'))
 						}
 						$idprodline = $value['fk_product'];
 					}
-					$lineid = $tmpinvoice->addline($value['note'], $pu_htline, round($qtyhour / $prodDurationHours, 2), $txtvaline, $localtax1line, $localtax2line, ($idprodline > 0 ? $idprodline : 0), (float) $remiseproject);
+					// Pass type=1 (service) explicitly so the invoice line is tagged as a service
+					// even when no product is bound to the time entry. Otherwise the default
+					// $type=0 leaks through and the PDF labels the operation as
+					// "Delivery of goods" instead of "Provision of services" (issue #34571).
+					$lineid = $tmpinvoice->addline($value['note'], $pu_htline, round($qtyhour / $prodDurationHours, 2), $txtvaline, $localtax1line, $localtax2line, ($idprodline > 0 ? $idprodline : 0), (float) $remiseproject, '', '', 0, 0, 0, 'HT', 0, Product::TYPE_SERVICE);
 					if ($lineid < 0) {
 						$error++;
 						setEventMessages(null, $tmpinvoice->errors, 'errors');
@@ -1344,14 +1327,6 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 		}
 		$arrayfields['author'] = array('label' => $langs->trans("By"), 'checked' => '1');
 		$arrayfields['t.note'] = array('label' => $langs->trans("Note"), 'checked' => '1');
-		if(isModEnabled('creditmanager')) {
-			$arrayfields['t.credit_status'] = array('label' => $langs->trans("Credit Status"), 'checked' => '1');
-			if (! (in_array("Credit Manager - Staff",$groupOfCurrentUser))) {
-				$arrayfields['t.fk_credit_type'] = array('label' => $langs->trans("Assessment"), 'checked' => '1');
-			}
-
-		}
-
 		if (isModEnabled('service') && !empty($projectstatic->thirdparty) && $projectstatic->thirdparty->id > 0 && $projectstatic->usage_bill_time) {
 			$arrayfields['t.fk_product'] = array('label' => $langs->trans("Product"), 'checked' => '1');
 		}
@@ -1400,12 +1375,6 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 		if ($search_note != '') {
 			$param .= '&search_note=' . urlencode($search_note);
 		}
-		if ($search_credit_status != '') {
-			$param .= '&search_credit_status=' . urlencode($search_credit_status);
-		}
-		if ($search_fk_credit_type != '') {
-			$param .= '&search_fk_credit_type=' . urlencode($search_fk_credit_type);
-		}
 		if ($search_duration != '') {
 			$param .= '&amp;search_field2=' . urlencode((string) ($search_duration));
 		}
@@ -1443,10 +1412,8 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 			$param .= '&search_timespent_duration_endmin=' . urlencode((string) ($search_timespent_endmin));
 		}
 
-		/*
-		 // Add $param from extra fields
-		 include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_search_param.tpl.php';
-		 */
+		// Add $param from extra fields
+		include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_search_param.tpl.php';
 		if ($id) {
 			$param .= '&id=' . urlencode((string) ($id));
 		}
@@ -1646,19 +1613,16 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 		$selectedfields = $form->multiSelectArrayWithCheckbox('selectedfields', $arrayfields, $varpage, getDolGlobalString('MAIN_CHECKBOX_LEFT_COLUMN')); // This also change content of $arrayfields
 
 		$sql = "SELECT t.rowid, t.fk_element, t.element_date, t.element_datehour, t.element_date_withhour, t.element_duration, t.fk_user, t.note, t.thm,";
-		$sql .= " t.fk_product,";
-		if(isModEnabled('creditmanager')) {
-			if (! (in_array("Credit Manager - Staff",$groupOfCurrentUser))) {
-				$sql .= " t.fk_credit_type,";
-			}
-			$sql .= "t.credit_status,";
-		}
-		$sql .= " pt.ref, pt.label, pt.fk_projet,";
+		$sql .= " t.fk_product, t.invoice_line_id,";
+		$sql .= " pt.ref, pt.label, pt.fk_projet, pt.billable,";
 		$sql .= " u.lastname, u.firstname, u.login, u.photo, u.gender, u.statut as user_status,";
 		$sql .= " il.fk_facture as invoice_id, inv.fk_statut,";
 		$sql .= " p.fk_soc,s.name_alias,";
-		$sql .= " t.invoice_line_id,";
-		$sql .= " pt.billable";
+		if (!empty($extrafields->attributes['projet_task']['label'])) {
+			foreach ($extrafields->attributes['projet_task']['label'] as $key => $val) {
+				$sql .= ($extrafields->attributes['projet_task']['type'][$key] != 'separate' ? ",efpt.".$key." as options_".$key : '');
+			}
+		}
 		// Add fields from hooks
 		$parameters = array();
 		$reshook = $hookmanager->executeHooks('printFieldListSelect', $parameters, $object, $action); // Note that $action and $object may have been modified by hook
@@ -1671,10 +1635,8 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 		$sql .= " LEFT JOIN ".MAIN_DB_PREFIX."facturedet as il ON il.rowid = t.invoice_line_id";
 		$sql .= " LEFT JOIN ".MAIN_DB_PREFIX."facture as inv ON inv.rowid = il.fk_facture";
 		$sql .= " LEFT JOIN ".MAIN_DB_PREFIX."product as prod ON prod.rowid = t.fk_product";
-		if(isModEnabled('creditmanager')) {
-			$sql .= " LEFT JOIN ".MAIN_DB_PREFIX."credits_types as ct ON ct.rowid = t.fk_credit_type";
-		}
 		$sql .= " INNER JOIN ".MAIN_DB_PREFIX."projet_task as pt ON pt.rowid = t.fk_element";
+		$sql .= " LEFT JOIN ".MAIN_DB_PREFIX."projet_task_extrafields as efpt ON pt.rowid = efpt.fk_object";
 		$sql .= " INNER JOIN ".MAIN_DB_PREFIX."projet as p ON p.rowid = pt.fk_projet";
 		$sql .= " INNER JOIN ".MAIN_DB_PREFIX."user as u ON t.fk_user = u.rowid";
 		$sql .= " LEFT JOIN ".MAIN_DB_PREFIX."societe as s ON s.rowid = p.fk_soc";
@@ -1684,9 +1646,6 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 		$reshook = $hookmanager->executeHooks('printFieldListFrom', $parameters, $object, $action); // Note that $action and $object may have been modified by hook
 		$sql .= $hookmanager->resPrint;
 		$sql .= " WHERE elementtype = 'task'";
-		if ((in_array("Credit Manager - PM",$groupOfCurrentUser))) {
-			$sql .= " AND (t.credit_status <> 'DRAFT')";
-		}
 		$sql .= " AND p.entity IN (".getEntity('project').")";
 		if (!$user->hasRight('projet', 'all', 'lire')) {
 			// Get list of project id allowed to user (in a string list separated by comma)
@@ -1713,14 +1672,6 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 
 		if ($search_note) {
 			$sql .= natural_search('t.note', $search_note);
-		}
-
-		if ($search_credit_status) {
-			$sql .= natural_search('t.credit_status', $search_credit_status);
-		}
-
-		if ($search_fk_credit_type) {
-			$sql .= natural_search('t.fk_credit_type', $search_fk_credit_type);
 		}
 		if ($search_task_ref) {
 			$sql .= natural_search('pt.ref', $search_task_ref);
@@ -1780,6 +1731,11 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 
 		$sql .= dolSqlDateFilter('t.element_datehour', $search_day, $search_month, $search_year);
 
+		// Add where from extra fields
+		$extrafieldsobjectkey = 'projet_task';
+		$extrafieldsobjectprefix = 'efpt.';
+		include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_search_sql.tpl.php';
+
 		// Add where from hooks
 		$parameters = array();
 		$reshook = $hookmanager->executeHooks('printFieldListWhere', $parameters, $object, $action); // Note that $action and $object may have been modified by hook
@@ -1831,6 +1787,7 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 				print '<!-- List of time spent -->' . "\n";
 
 				$title = $langs->trans("ListTaskTimeForTask");
+
 				print_barre_liste($title, $page, $_SERVER["PHP_SELF"], $param, $sortfield, $sortorder, $massactionbutton, $num, $nbtotalofrecords, 'clock', 0, $linktocreatetime, '', $limit, 0, 0, 1);
 			}
 
@@ -1869,7 +1826,6 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 			print '<td>' . $langs->trans("Note") . '</td>';
 			print '<td>' . $langs->trans("NewTimeSpent") . '</td>';
 			print '<td>' . $langs->trans("ProgressDeclared") . '</td>';
-			
 			if (!getDolGlobalString('PROJECT_HIDE_TASKS') && getDolGlobalString('PROJECT_BILL_TIME_SPENT')) {
 				print '<td></td>';
 
@@ -1877,15 +1833,7 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 					print '<td>'.$langs->trans("Product").'</td>';
 				}
 			}
-
-			if (isModEnabled("creditmanager")) {
-				print '<td>'.$langs->trans("State of timesheet").'</td>';
-				if (! (in_array("Credit Manager - Staff",$groupOfCurrentUser))) {
-					print '<td>'.$langs->trans("Assessment").'</td>';
-				}
-			}
 			// Hook fields
-
 			$parameters = array('mode' => 'create');
 			$reshook = $hookmanager->executeHooks('printFieldListTitle', $parameters, $object, $action); // Note that $action and $object may have been modified by hook
 			print $hookmanager->resPrint;
@@ -1941,8 +1889,6 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 			print '<textarea name="timespent_note" class="maxwidth100onsmartphone" rows="' . ROWS_2 . '">' . (GETPOST('timespent_note') ? GETPOST('timespent_note') : '') . '</textarea>';
 			print '</td>';
 
-			
-
 			// Duration - Time spent
 			print '<td class="nowraponall">';
 			$durationtouse = (GETPOST('timespent_duration') ? GETPOST('timespent_duration') : '');
@@ -1970,23 +1916,11 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 				}
 			}
 
-			//Credit Status
-			if (isModEnabled("creditmanager")) {
-				print '<td>';
-				print $form->selectarray('timespent_credit_status', $arrayOfCreditStatusOfTimeSpent, 'timespent_credit_status', 0, 0, 0, '', 0, 0, 0, '', 'onrightofpage width200');
-				print '</td>';
-				if (! (in_array("Credit Manager - Staff",$groupOfCurrentUser))) {
-					print '<td>';
-					print $formCreditType->select_credit_types_list(0, 'timespent_fk_credit_type');
-					print '</td>';
-				}
-			}
-
 			// Fields from hook
 			$parameters = array('mode' => 'create');
 			$reshook = $hookmanager->executeHooks('printFieldListValue', $parameters, $object, $action); // Note that $action and $object may have been modified by hook
 			print $hookmanager->resPrint;
-			
+
 			print '<td class="center">';
 			$form->buttonsSaveCancel();
 			print '<input type="submit" name="save" class="button buttongen smallpaddingimp marginleftonly margintoponlyshort marginbottomonlyshort button-add reposition" value="'.$langs->trans("Add").'">';
@@ -2071,7 +2005,6 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 				print '<td class="liste_titre"><input type="text" class="flat maxwidth125" name="search_task_label" value="'.dol_escape_htmltag($search_task_label).'"></td>';
 			}
 		}
-
 		// Author
 		if (!empty($arrayfields['author']['checked'])) {
 			print '<td class="liste_titre">'.$form->select_dolusers(($search_user > 0 ? $search_user : -1), 'search_user', 1, null, 0, '', '', '0', 0, 0, '', 0, '', 'maxwidth125').'</td>';
@@ -2079,18 +2012,6 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 		// Note
 		if (!empty($arrayfields['t.note']['checked'])) {
 			print '<td class="liste_titre"><input type="text" class="flat maxwidth75" name="search_note" value="' . dol_escape_htmltag($search_note) . '"></td>';
-		}
-		//Credit status
-		if (!empty($arrayfields['t.credit_status']['checked'])) {
-			print '<td class="liste_titre">';
-			print $form->selectarray('search_credit_status', $arrayOfCreditStatusOfTimeSpent, dol_escape_htmltag($search_credit_status), dol_escape_htmltag($search_credit_status), 0, 0, '', 0, 0, 0, '', 'onrightofpage width200');
-			print '</td>';
-		}
-		// Credit type
-		if (!empty($arrayfields['t.fk_credit_type']['checked'])) {
-			print '<td class="liste_titre">';
-			print $formCreditType->select_credit_types_list(dol_escape_htmltag($search_fk_credit_type), 'search_fk_credit_type');
-			print '</td>';
 		}
 		// Duration
 		if (!empty($arrayfields['t.element_duration']['checked'])) {
@@ -2128,10 +2049,10 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 			print '<td class="liste_titre center">' . $form->selectyesno('search_valuebilled', $search_valuebilled, 1, false, 1) . '</td>';
 		}
 
-		/*
-		 // Extra fields
-		 include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_search_input.tpl.php';
-		 */
+		// Extra fields
+		$extrafieldsobjectkey = 'projet_task';
+		$extrafieldsobjectprefix = 'ef.';
+		include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_search_input.tpl.php';
 		// Fields from hook
 		$parameters = array('arrayfields' => $arrayfields);
 		$reshook = $hookmanager->executeHooks('printFieldListOption', $parameters, $object, $action); // Note that $action and $object may have been modified by hook
@@ -2197,14 +2118,6 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 			print_liste_field_titre($arrayfields['t.note']['label'], $_SERVER['PHP_SELF'], 't.note', '', $param, '', $sortfield, $sortorder);
 			$totalarray['nbfield']++;
 		}
-		if (!empty($arrayfields['t.credit_status']['checked'])) {
-			print_liste_field_titre($arrayfields['t.credit_status']['label'], $_SERVER['PHP_SELF'], 't.credit_status', '', $param, '', $sortfield, $sortorder);
-			$totalarray['nbfield']++;
-		}
-		if (!empty($arrayfields['t.fk_credit_type']['checked'])) {
-			print_liste_field_titre($arrayfields['t.fk_credit_type']['label'], $_SERVER['PHP_SELF'], 't.fk_credit_type', '', $param, '', $sortfield, $sortorder);
-			$totalarray['nbfield']++;
-		}
 		if (!empty($arrayfields['t.element_duration']['checked'])) {
 			print_liste_field_titre($arrayfields['t.element_duration']['label'], $_SERVER['PHP_SELF'], 't.element_duration', '', $param, '', $sortfield, $sortorder, 'right ');
 			$totalarray['nbfield']++;
@@ -2222,10 +2135,10 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 			print_liste_field_titre($arrayfields['valuebilled']['label'], $_SERVER['PHP_SELF'], 'il.total_ht', '', $param, '', $sortfield, $sortorder, 'center ', $langs->trans("SelectLinesOfTimeSpentToInvoice"));
 			$totalarray['nbfield']++;
 		}
-		/*
-		 // Extra fields
-		 include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_search_title.tpl.php';
-		 */
+		// Extra fields
+		$extrafieldsobjectkey = 'projet_task';
+		$extrafieldsobjectprefix = 'ef.';
+		include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_search_title.tpl.php';
 		// Hook fields
 		$parameters = array('arrayfields' => $arrayfields, 'param' => $param, 'sortfield' => $sortfield, 'sortorder' => $sortorder);
 		$reshook = $hookmanager->executeHooks('printFieldListTitle', $parameters, $object, $action); // Note that $action and $object may have been modified by hook
@@ -2505,41 +2418,6 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 				print '<input type="hidden" name="timespent_note_line" value="' . dol_escape_htmltag($task_time->note, 0, 1) . '">';
 			}
 
-			//Credit Status
-			if (!empty($arrayfields['t.credit_status']['checked'])) {
-				if ($action == 'editline' && GETPOSTINT('lineid') == $task_time->rowid) {
-					print '<td class="small">';
-					print $form->selectarray('timespent_credit_status_line', $arrayOfCreditStatusOfTimeSpent, dol_escape_htmltag($task_time->credit_status, 0, 1), dol_escape_htmltag($task_time->credit_status, 0, 1), 0, 0, '', 0, 0, 0, '', 'onrightofpage width200');
-					print '</td>';
-				} else {
-					print '<td class="small tdoverflowmax150 classfortooltip" title="'.dol_string_onlythesehtmltags(dol_htmlentitiesbr($task_time->credit_status)).'">';
-					print dolGetFirstLineOfText($task_time->credit_status);
-					print '</td>';
-				}
-				if (!$i) {
-					$totalarray['nbfield']++;
-				}
-			} elseif ($action == 'editline' && GETPOSTINT('lineid') == $task_time->rowid) {
-				print '<input type="hidden" name="timespent_credit_status_line" value="' . dol_escape_htmltag($task_time->credit_status, 0, 1) . '">';
-			}
-
-			//Credit Type
-			if (!empty($arrayfields['t.fk_credit_type']['checked'])) {
-				if ($action == 'editline' && GETPOSTINT('lineid') == $task_time->rowid) {
-					print '<td class="small">';
-					print $formCreditType->select_credit_types_list(dol_escape_htmltag($task_time->fk_credit_type, 0, 1), 'timespent_fk_credit_type_line');
-					print '</td>';
-				} else {
-					print '<td class="small tdoverflowmax150 classfortooltip" title="'.dol_string_onlythesehtmltags(dol_htmlentitiesbr($task_time->fk_credit_type)).'">';
-					print $arrayOfCreditType[dolGetFirstLineOfText($task_time->fk_credit_type)];
-					print '</td>';
-				}
-				if (!$i) {
-					$totalarray['nbfield']++;
-				}
-			} elseif ($action == 'editline' && GETPOSTINT('lineid') == $task_time->rowid) {
-				print '<input type="hidden" name="timespent_fk_credit_type_line" value="' . dol_escape_htmltag($task_time->fk_credit_type, 0, 1) . '">';
-			}
 			// Time spent
 			if (!empty($arrayfields['t.element_duration']['checked'])) {
 				print '<td class="right nowraponall">';
@@ -2667,13 +2545,13 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 				}
 			}
 
-			/*
-			 // Extra fields
-			 include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_print_fields.tpl.php';
-			 */
+			// Extra fields
+			$obj = $task_time;
+			$extrafieldsobjectkey = 'projet_task';
+			$extrafieldsobjectprefix = 'ef.';
+			include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_print_fields.tpl.php';
 
 			// Fields from hook
-
 			$parameters = array('arrayfields' => $arrayfields, 'obj' => $task_time, 'i' => $i, 'totalarray' => &$totalarray);
 			$reshook = $hookmanager->executeHooks('printFieldListValue', $parameters, $object, $action); // Note that $action and $object may have been modified by hook
 			print $hookmanager->resPrint;
@@ -2841,32 +2719,6 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 					print '<input type="hidden" name="timespent_note_line" rows="' . ROWS_2 . '" value="' . dol_escape_htmltag($task_time->note, 0, 1) . '">';
 				}
 
-				// Credit Status
-				if (!empty($arrayfields['t.credit_status']['checked'])) {
-					print '<td class="tdoverflowmax300">';
-					if ($action == 'splitline' && GETPOSTINT('lineid') == $task_time->rowid) {
-						print $form->selectarray('timespent_credit_status_line', $arrayOfCreditStatusOfTimeSpent, dol_escape_htmltag($task_time->credit_status, 0, 1), dol_escape_htmltag($task_time->credit_status, 0, 1), 0, 0, '', 0, 0, 0, '', 'onrightofpage width200');
-					} else {
-						print dol_nl2br($task_time->credit_status);
-					}
-					print '</td>';
-				} elseif ($action == 'splitline' && GETPOSTINT('lineid') == $task_time->rowid) {
-					print '<input type="hidden" name="timespent_credit_status_line" rows="' . ROWS_2 . '" value="' . dol_escape_htmltag($task_time->credit_status, 0, 1) . '">';
-				}
-
-				// Credit type
-				if (!empty($arrayfields['t.fk_credit_type']['checked'])) {
-					print '<td class="tdoverflowmax300">';
-					if ($action == 'splitline' && GETPOSTINT('lineid') == $task_time->rowid) {
-						print $formCreditType->select_credit_types_list(dol_escape_htmltag($task_time->fk_credit_type, 0, 1), 'timespent_fk_credit_type_line');
-					} else {
-						print dol_nl2br($task_time->fk_credit_type);
-					}
-					print '</td>';
-				} elseif ($action == 'splitline' && GETPOSTINT('lineid') == $task_time->rowid) {
-					print '<input type="hidden" name="timespent_fk_credit_type_line" rows="' . ROWS_2 . '" value="' . dol_escape_htmltag($task_time->fk_credit_type, 0, 1) . '">';
-				}
-
 				// Time spent
 				if (!empty($arrayfields['t.element_duration']['checked'])) {
 					print '<td class="right">';
@@ -2905,10 +2757,11 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 					print '</td>';
 				}
 
-				/*
-				 // Extra fields
-				 include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_print_fields.tpl.php';
-				 */
+				// Extra fields
+				$obj = $task_time;
+				$extrafieldsobjectkey = 'projet_task';
+				$extrafieldsobjectprefix = 'ef.';
+				include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_print_fields.tpl.php';
 
 				// Fields from hook
 				$parameters = array('arrayfields' => $arrayfields, 'obj' => $task_time, 'mode' => 'split1');
@@ -3032,32 +2885,6 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 					print '<input type="hidden" name="timespent_note_line_2" value="' . dol_escape_htmltag($task_time->note, 0, 1) . '">';
 				}
 
-				// Credit Status
-				if (!empty($arrayfields['t.credit_status']['checked'])) {
-					print '<td class="small tdoverflowmax300"">';
-					if ($action == 'splitline' && GETPOSTINT('lineid') == $task_time->rowid) {
-						print $form->selectarray('timespent_credit_status_line_2', $arrayOfCreditStatusOfTimeSpent, dol_escape_htmltag($task_time->credit_status, 0, 1), dol_escape_htmltag($task_time->credit_status, 0, 1), 0, 0, '', 0, 0, 0, '', 'onrightofpage width200');
-					} else {
-						print dol_nl2br($task_time->credit_status);
-					}
-					print '</td>';
-				} elseif ($action == 'splitline' && GETPOSTINT('lineid') == $task_time->rowid) {
-					print '<input type="hidden" name="timespent_credit_status_line_2" value="' . dol_escape_htmltag($task_time->credit_status, 0, 1) . '">';
-				}
-
-				// Note
-				if (!empty($arrayfields['t.fk_credit_type']['checked'])) {
-					print '<td class="small tdoverflowmax300"">';
-					if ($action == 'splitline' && GETPOSTINT('lineid') == $task_time->rowid) {
-						print $formCreditType->select_credit_types_list(dol_escape_htmltag($task_time->fk_credit_type, 0, 1), 'timespent_fk_credit_type_line_2');
-					} else {
-						print dol_nl2br($task_time->fk_credit_type);
-					}
-					print '</td>';
-				} elseif ($action == 'splitline' && GETPOSTINT('lineid') == $task_time->rowid) {
-					print '<input type="hidden" name="timespent_fk_credit_type_line_2" value="' . dol_escape_htmltag($task_time->fk_credit_type, 0, 1) . '">';
-				}
-
 				// Time spent
 				if (!empty($arrayfields['t.element_duration']['checked'])) {
 					print '<td class="right">';
@@ -3099,10 +2926,11 @@ if (($id > 0 || !empty($ref)) || $projectidforalltimes > 0 || $allprojectforuser
 					print '</td>';
 				}
 
-				/*
-				 // Extra fields
-				 include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_print_fields.tpl.php';
-				 */
+				// Extra fields
+				$obj = $task_time;
+				$extrafieldsobjectkey = 'projet_task';
+				$extrafieldsobjectprefix = 'ef.';
+				include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_print_fields.tpl.php';
 
 				// Fields from hook
 				$parameters = array('arrayfields' => $arrayfields, 'obj' => $task_time, 'mode' => 'split2');

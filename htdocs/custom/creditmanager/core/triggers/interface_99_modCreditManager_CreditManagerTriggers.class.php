@@ -25,6 +25,7 @@
 require_once DOL_DOCUMENT_ROOT.'/core/triggers/dolibarrtriggers.class.php';
 require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/class/CreditDebit.class.php';
 require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/class/CreditType.class.php';
+require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/class/CreditStatusTypesAndTimesheets.class.php';
 
 /**
  * Class of triggers for Credit Manager module
@@ -61,13 +62,32 @@ class InterfaceCreditManagerTriggers extends DolibarrTriggers
 			return 0;
 		}
 
-		if ($action === 'TASK_TIMESPENT_CREATE' || $action === 'TASK_TIMESPENT_MODIFY') {
-			return $this->handleTaskTimespentUpsert($action, $object);
+		if ($action === 'TASK_TIMESPENT_CREATE') {
+			$creditTM = new CreditStatusTypesAndTimesheets($this->db);
+			$creditTM->fk_element_time = (int)$object->timespent_id;
+			$fk_credits_types_selected = GETPOST('fk_credits_types');
+			$fk_credits_status_selected = GETPOST('fk_credits_status');
+			$creditTM->fk_credits_status = (int) $fk_credits_status_selected ? (int) $fk_credits_status_selected : "NULL";
+			$creditTM->fk_credits_types = (int) $fk_credits_types_selected ? (int) $fk_credits_types_selected : "NULL";
+
+			$creditTM->create();
+		}
+
+		if ($action === 'TASK_TIMESPENT_MODIFY') {
+
+			$creditTM = new CreditStatusTypesAndTimesheets($this->db);
+			$creditTM->fk_element_time = (int)$object->timespent_id;
+			$fk_credits_types_selected = GETPOSTINT('fk_credits_types');
+			$fk_credits_status_selected = GETPOSTINT('fk_credits_status');
+			$creditTM->fk_credits_status = (int) $fk_credits_status_selected ? (int) $fk_credits_status_selected : "NULL";
+			$creditTM->fk_credits_types = (int) $fk_credits_types_selected ? (int) $fk_credits_types_selected : "NULL";
+			
+			$creditTM->update();
 		}
 
 		// Timesheet entry deleted → refund any debit movement linked to it
 		if ($action === 'TASK_TIMESPENT_DELETE' || $action === 'TIMESPENT_DELETE') {
-			return $this->handleTimespentDelete($object);
+			//return $this->handleTimespentDelete($object);
 		}
 
 		return 0;
