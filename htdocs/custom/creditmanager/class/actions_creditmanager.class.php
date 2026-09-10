@@ -128,7 +128,7 @@ class ActionsCreditmanager extends CommonHookActions
 			return false;
 		}
 
-		$contexts = explode(':', (string) $parameters['currentcontext']);
+		$contexts = explode(':', (string) $parameters['context']);
 		return in_array('tasktimelist', $contexts, true);
 	}
 
