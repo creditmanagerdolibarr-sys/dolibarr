@@ -17,15 +17,15 @@
  */
 
 /**
- *	\file       htdocs/custom/creditmanager/class/CreditType.class.php
+ *	\file       htdocs/custom/creditmanager/class/CreditStatus.class.php
  *	\ingroup    creditmanager
- *	\brief      Class to manage credit types (CRUD and debit configuration)
+ *	\brief      Class to manage credit workflow statuses
  */
 
 require_once DOL_DOCUMENT_ROOT.'/core/class/commonobject.class.php';
 
 /**
- *	Class to manage credit types
+ *	Class to manage credit workflow statuses
  */
 class CreditStatus extends CommonObject
 {
@@ -54,6 +54,14 @@ class CreditStatus extends CommonObject
 	 */
 	public $status_name;
 
+	/** @var array<string,string> */
+	public static $allowedStatuses = array(
+		'DRAFT' => 'DRAFT',
+		'SUBMITTED' => 'SUBMITTED',
+		'APPROVED' => 'APPROVED',
+		'REJECTED' => 'REJECTED',
+		'DEBITED' => 'DEBITED',
+	);
 
 	/**
 	 *	Constructor
@@ -70,16 +78,18 @@ class CreditStatus extends CommonObject
 	 *	Load object in memory from database
 	 *
 	 *	@param	int		$id		Id of object
-	 *	@param	string	$code	Code of type (alternative to id)
+	 *	@param	string	$name	Status name (alternative to id)
 	 *	@return	int				<0 if KO, >0 if OK
 	 */
-	public function fetch($id)
+	public function fetch($id = 0, $name = '')
 	{
 		$sql = "SELECT rowid, status_name";
 		$sql .= " FROM ".$this->db->prefix().$this->table_element;
 
 		if ($id > 0) {
 			$sql .= " WHERE rowid = ".((int) $id);
+		} elseif ($name !== '') {
+			$sql .= " WHERE UPPER(status_name) = '".$this->db->escape(strtoupper(trim($name)))."'";
 		} else {
 			return -1;
 		}
@@ -102,10 +112,9 @@ class CreditStatus extends CommonObject
 	}
 
 	/**
-	 *	Load all credit types (optionally only active)
+	 *	Load all workflow statuses
 	 *
-	 *	@param	int		$activeOnly	1 = only active types
-	 *	@return	array|int			Array of CreditType, or <0 if KO
+	 *	@return	array|int			Array of CreditStatus, or <0 if KO
 	 */
 	public function fetchAll()
 	{
@@ -127,5 +136,20 @@ class CreditStatus extends CommonObject
 		}
 		$this->db->free($resql);
 		return $list;
+	}
+
+	/**
+	 * Return the row id for a status name.
+	 *
+	 * @param string $name Status name
+	 * @return int Row id, 0 if not found, <0 on error
+	 */
+	public function getIdByName($name)
+	{
+		$result = $this->fetch(0, $name);
+		if ($result < 0) {
+			return -1;
+		}
+		return $result > 0 ? (int) $this->rowid : 0;
 	}
 }

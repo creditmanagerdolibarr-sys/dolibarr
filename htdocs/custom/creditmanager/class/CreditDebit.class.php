@@ -25,6 +25,7 @@ require_once DOL_DOCUMENT_ROOT.'/core/class/commonobject.class.php';
 dol_include_once('/creditmanager/class/CreditBalance.class.php');
 dol_include_once('/creditmanager/class/CreditMovement.class.php');
 dol_include_once('/creditmanager/class/CreditType.class.php');
+dol_include_once('/creditmanager/class/CreditStatusTypesAndTimesheets.class.php');
 require_once DOL_DOCUMENT_ROOT.'/core/lib/date.lib.php';
 
 /**
@@ -108,16 +109,15 @@ class CreditDebit
 			$this->db->rollback();
 			return -4;
 		}
+		$reference = 'DEB-'.dol_print_date(dol_now(), '%Y%m%d').'-'.$movementId;
+		if ($movement->setReference($reference) < 0) {
+			$this->error = $movement->error;
+			$this->db->rollback();
+			return -4;
+		}
 
 		if ($fk_element_time > 0) {
-			$reference = 'DEB-'.dol_print_date(dol_now(), '%Y%m%d').'-'.$movementId;
-			if (!$this->updateTimesheetCreditFields($fk_element_time, array(
-				'fk_credit_type' => (int) $fk_credit_type,
-				'credit_status' => 'DEBITED',
-				'credit_debit_reference' => $reference,
-				'credit_debit_date' => '__NOW__',
-				'credit_debit_amount' => (float) $amount,
-			))) {
+			if (!$this->setTimesheetCreditMetadata($fk_element_time, (int) $fk_credit_type, 'DEBITED')) {
 				$this->db->rollback();
 				return -5;
 			}
@@ -241,14 +241,18 @@ class CreditDebit
 			$this->db->rollback();
 			return -5;
 		}
+		$reference = 'REF-'.dol_print_date(dol_now(), '%Y%m%d').'-'.$movementId;
+		if ($movement->setReference($reference) < 0) {
+			$this->error = $movement->error;
+			$this->db->rollback();
+			return -5;
+		}
 
-		if (!$this->updateTimesheetCreditFields($fk_element_time, array(
-			'fk_credit_type' => $debitMovement->fk_credit_type ? (int) $debitMovement->fk_credit_type : null,
-			'credit_status' => 'APPROVED',
-			'credit_debit_reference' => null,
-			'credit_debit_date' => null,
-			'credit_debit_amount' => null,
-		))) {
+		if (!$this->setTimesheetCreditMetadata(
+			$fk_element_time,
+			$debitMovement->fk_credit_type ? (int) $debitMovement->fk_credit_type : 0,
+			'APPROVED'
+		)) {
 			$this->db->rollback();
 			return -6;
 		}
@@ -259,15 +263,10 @@ class CreditDebit
 
 	public function saveTimesheetCreditType($fk_element_time, $fk_credit_type)
 	{
-		$fields = array(
-			'fk_credit_type' => $fk_credit_type > 0 ? (int) $fk_credit_type : null,
-			'credit_debit_reference' => null,
-			'credit_debit_date' => null,
-			'credit_debit_amount' => null,
-			'credit_approval_date' => null,
-		);
-
-		return $this->updateTimesheetCreditFields($fk_element_time, $fields);
+		$link = new CreditStatusTypesAndTimesheets($this->db);
+		$current = $link->getMetadata((int) $fk_element_time);
+		$status = $current && $current['status'] !== '' ? $current['status'] : 'DRAFT';
+		return $this->setTimesheetCreditMetadata($fk_element_time, (int) $fk_credit_type, $status);
 	}
 
 	/**
@@ -288,36 +287,42 @@ class CreditDebit
 			return -1;
 		}
 
-		$sql = "SELECT rowid, credit_status FROM ".$this->db->prefix()."element_time";
-		$sql .= " WHERE rowid = ".$fk_element_time;
-		$resql = $this->db->query($sql);
-		if (!$resql || !($obj = $this->db->fetch_object($resql))) {
+		$this->db->begin();
+		$link = new CreditStatusTypesAndTimesheets($this->db);
+		$metadata = $link->getMetadata($fk_element_time, true);
+		if ($metadata === null) {
 			$this->error = 'Timesheet not found';
+			$this->db->rollback();
 			return -1;
 		}
-		$this->db->free($resql);
 
-		if (strtoupper(trim((string) $obj->credit_status)) !== 'SUBMITTED') {
+		if ($metadata['status'] !== 'SUBMITTED') {
 			$this->error = 'Timesheet is not in submitted status';
-			return -1;
-		}
-
-		if (!$this->updateTimesheetCreditFields($fk_element_time, array(
-			'fk_credit_type' => $fk_credit_type,
-			'credit_status' => 'APPROVED',
-			'credit_approval_date' => $this->db->idate(dol_now()),
-		))) {
+			$this->db->rollback();
 			return -1;
 		}
 
 		$creditType = new CreditType($this->db);
-		if ($creditType->fetch($fk_credit_type) > 0 && !empty($creditType->auto_debit)) {
+		if ($creditType->fetch($fk_credit_type) <= 0 || empty($creditType->active)) {
+			$this->error = 'Credit type not found or inactive';
+			$this->db->rollback();
+			return -1;
+		}
+
+		if (!$this->setTimesheetCreditMetadata($fk_element_time, $fk_credit_type, 'APPROVED', dol_now())) {
+			$this->db->rollback();
+			return -1;
+		}
+
+		if (!empty($creditType->auto_debit)) {
 			$result = $this->debitCreditsFromTimesheet($fk_element_time, $fk_credit_type);
 			if ($result < 0) {
+				$this->db->rollback();
 				return -1;
 			}
 		}
 
+		$this->db->commit();
 		return 1;
 	}
 
@@ -336,33 +341,42 @@ class CreditDebit
 			return -1;
 		}
 
-		$sql = "SELECT rowid, credit_status, note FROM ".$this->db->prefix()."element_time";
-		$sql .= " WHERE rowid = ".$fk_element_time;
+		$this->db->begin();
+		$sql = "SELECT rowid, note FROM ".$this->db->prefix()."element_time";
+		$sql .= " WHERE rowid = ".$fk_element_time." FOR UPDATE";
 		$resql = $this->db->query($sql);
 		if (!$resql || !($obj = $this->db->fetch_object($resql))) {
 			$this->error = 'Timesheet not found';
+			$this->db->rollback();
 			return -1;
 		}
 		$this->db->free($resql);
 
-		if (strtoupper(trim((string) $obj->credit_status)) !== 'SUBMITTED') {
+		$link = new CreditStatusTypesAndTimesheets($this->db);
+		$metadata = $link->getMetadata($fk_element_time, true);
+		if ($metadata === null || $metadata['status'] !== 'SUBMITTED') {
 			$this->error = 'Timesheet is not in submitted status';
+			$this->db->rollback();
 			return -1;
 		}
 
-		$fields = array(
-			'credit_status' => 'REJECTED',
-			'fk_credit_type' => null,
-		);
 		if ($comment !== '') {
 			$note = trim((string) $obj->note);
-			$fields['note'] = ($note !== '' ? $note."\n" : '').$comment;
+			$sqlNote = "UPDATE ".$this->db->prefix()."element_time";
+			$sqlNote .= " SET note = '".$this->db->escape(($note !== '' ? $note."\n" : '').$comment)."'";
+			$sqlNote .= " WHERE rowid = ".$fk_element_time;
+			if (!$this->db->query($sqlNote)) {
+				$this->error = $this->db->lasterror();
+				$this->db->rollback();
+				return -1;
+			}
 		}
 
-		if (!$this->updateTimesheetCreditFields($fk_element_time, $fields)) {
+		if (!$this->setTimesheetCreditMetadata($fk_element_time, 0, 'REJECTED')) {
+			$this->db->rollback();
 			return -1;
 		}
-
+		$this->db->commit();
 		return 1;
 	}
 
@@ -389,30 +403,16 @@ class CreditDebit
 		return $obj ? 1 : 0;
 	}
 
-	private function updateTimesheetCreditFields($fk_element_time, $fields)
+	private function setTimesheetCreditMetadata($fk_element_time, $fk_credit_type, $status, $approvalDate = null)
 	{
 		if ($fk_element_time <= 0) {
 			return true;
 		}
 
-		$sql = "UPDATE ".$this->db->prefix()."element_time SET ";
-		$parts = array();
-		foreach ($fields as $column => $value) {
-			if ($value === '__NOW__') {
-				$parts[] = $column." = NOW()";
-			} elseif ($value === null) {
-				$parts[] = $column." = NULL";
-			} elseif (is_numeric($value) && $column !== 'credit_status' && $column !== 'credit_debit_reference') {
-				$parts[] = $column." = ".((float) $value);
-			} else {
-				$parts[] = $column." = '".$this->db->escape((string) $value)."'";
-			}
-		}
-		$sql .= implode(', ', $parts);
-		$sql .= " WHERE rowid = ".((int) $fk_element_time);
-
-		if (!$this->db->query($sql)) {
-			$this->error = $this->db->lasterror();
+		$link = new CreditStatusTypesAndTimesheets($this->db);
+		$result = $link->setMetadata((int) $fk_element_time, (int) $fk_credit_type, $status, $approvalDate);
+		if ($result < 0) {
+			$this->error = $link->error;
 			return false;
 		}
 
