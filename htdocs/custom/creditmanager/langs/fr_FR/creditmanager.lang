@@ -85,6 +85,7 @@ Settings=Paramètres
 CreditTypes=Types de crédits
 CreditType=Type de crédit
 SelectCreditType=Sélectionner un type
+SelectCreditStatus=Sélectionner un statut
 CreditAttribution=Attribution crédits
 
 #
@@ -430,6 +431,7 @@ CreditClientMovementDebit=Débit
 CreditClientAmountMin=Montant min
 CreditClientAmountMax=Montant max
 CreditClientStatus=Statut
+CreditStatus=Statut du crédit
 CreditClientStatusAll=Tous
 CreditClientStatusValidated=Validé
 CreditClientStatusPending=En attente
