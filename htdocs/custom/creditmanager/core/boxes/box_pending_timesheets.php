@@ -190,14 +190,15 @@ class box_pending_timesheets extends ModeleBoxes
 		// Count all pending (badge) with same scope + filters
 		$sqlCount = "SELECT COUNT(DISTINCT et.rowid) as nb";
 		$sqlFrom = " FROM ".$this->db->prefix()."element_time as et";
-		$sqlFrom .= " LEFT JOIN ".$this->db->prefix()."credits_types as ct ON ct.rowid = et.fk_credit_type AND ct.entity IN (".getEntity('credits_type').")";
+		$sqlFrom .= " INNER JOIN ".$this->db->prefix()."credits_status_types_and_timesheets as rel ON rel.fk_element_time = et.rowid";
+		$sqlFrom .= " INNER JOIN ".$this->db->prefix()."credits_status as cs ON cs.rowid = rel.fk_credits_status";
+		$sqlFrom .= " LEFT JOIN ".$this->db->prefix()."credits_types as ct ON ct.rowid = rel.fk_credits_types AND ct.entity IN (".getEntity('credits_type').")";
 		$sqlFrom .= " LEFT JOIN ".$this->db->prefix()."projet_task as tsk ON tsk.rowid = et.fk_element AND et.elementtype = 'task'";
 		$sqlFrom .= " LEFT JOIN ".$this->db->prefix()."projet as pr ON pr.rowid = tsk.fk_projet";
 		$sqlFrom .= " LEFT JOIN ".$this->db->prefix()."societe as s ON s.rowid = pr.fk_soc";
 		$sqlWhere = " WHERE et.elementtype = 'task'";
 		$sqlWhere .= " AND et.fk_element > 0";
-		$sqlWhere .= " AND UPPER(TRIM(et.credit_status)) = 'SUBMITTED'";
-		$sqlWhere .= " AND (et.credit_debit_reference IS NULL OR et.credit_debit_reference = '')";
+		$sqlWhere .= " AND UPPER(TRIM(cs.status_name)) = 'SUBMITTED'";
 		$sqlWhere .= creditmanagerTimesheetScopeProjectWhereSql($this->db, $user, 'pr');
 
 		if ($filterSoc > 0) {
@@ -207,7 +208,7 @@ class box_pending_timesheets extends ModeleBoxes
 			$sqlWhere .= " AND pr.rowid = ".((int) $filterProject);
 		}
 		if ($filterType > 0) {
-			$sqlWhere .= " AND et.fk_credit_type = ".((int) $filterType);
+			$sqlWhere .= " AND rel.fk_credits_types = ".((int) $filterType);
 		}
 
 		$pendingTotal = 0;
@@ -254,8 +255,10 @@ class box_pending_timesheets extends ModeleBoxes
 		$sqlSoc .= " INNER JOIN ".$this->db->prefix()."projet as pr ON pr.fk_soc = s.rowid";
 		$sqlSoc .= " INNER JOIN ".$this->db->prefix()."projet_task as tsk ON tsk.fk_projet = pr.rowid";
 		$sqlSoc .= " INNER JOIN ".$this->db->prefix()."element_time as et ON et.fk_element = tsk.rowid AND et.elementtype = 'task'";
+		$sqlSoc .= " INNER JOIN ".$this->db->prefix()."credits_status_types_and_timesheets as rel ON rel.fk_element_time = et.rowid";
+		$sqlSoc .= " INNER JOIN ".$this->db->prefix()."credits_status as cs ON cs.rowid = rel.fk_credits_status";
 		$sqlSoc .= " WHERE s.entity IN (".$entitySoc.")";
-		$sqlSoc .= " AND UPPER(TRIM(et.credit_status)) = 'SUBMITTED'";
+		$sqlSoc .= " AND UPPER(TRIM(cs.status_name)) = 'SUBMITTED'";
 		$sqlSoc .= creditmanagerTimesheetScopeProjectWhereSql($this->db, $user, 'pr');
 		if (!empty($allowedSocIds) && $scope['type'] !== 'all') {
 			$sqlSoc .= " AND s.rowid IN (".implode(',', array_map('intval', $allowedSocIds)).")";
@@ -432,7 +435,7 @@ class box_pending_timesheets extends ModeleBoxes
 			$orderSql = ' ORDER BY et.element_duration DESC, et.element_date DESC';
 		}
 
-		$sqlSelect = "SELECT et.rowid, et.element_duration, et.element_date, et.fk_credit_type,";
+		$sqlSelect = "SELECT et.rowid, et.element_duration, et.element_date, rel.fk_credits_types AS fk_credit_type,";
 		$sqlSelect .= " COALESCE(NULLIF(TRIM(et.ref_ext), ''), tsk.ref, '') AS origin_ref,";
 		$sqlSelect .= " pr.rowid AS project_id, pr.ref AS project_ref, pr.title AS project_title,";
 		$sqlSelect .= " s.rowid AS socid, s.nom AS socname, ct.code AS type_code";

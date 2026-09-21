@@ -20,6 +20,9 @@ class ActionsCreditmanager extends CommonHookActions
 	 */
 	public $db;
 
+	/** @var array<int,array<string,mixed>> */
+	public $resArray = array();
+
 	public function __construct($db)
 	{
 		$this->db = $db;
@@ -63,24 +66,28 @@ class ActionsCreditmanager extends CommonHookActions
 		$timespent = isset($parameters['obj']) ? $parameters['obj'] : null;
 
 		$this->resprints = '';
-		if ($mode !== 'create' && !($action === 'editline' && GETPOSTINT('lineid') === (int) $timespent->rowid)) {
+		if ($mode === 'split1' || $mode === 'split2') {
+			$this->resprints = '<td></td><td></td>';
+			return 0;
+		}
+		if ($mode !== 'create' && is_object($timespent) && !($action === 'editline' && GETPOSTINT('lineid') === (int) $timespent->rowid)) {
 			["fk_credits_status_shows" => $fk_credits_status_shows, "fk_credits_types_shows" => $fk_credits_types_shows] = $this->withTimespentIdReturnCorrecpondingCreditStatusAndTypes($timespent->rowid);
 			//credits types logics
 			if ($fk_credits_types_shows) {
 				$creditTypes = new CreditType($this->db);
 				$creditTypes->fetch($fk_credits_types_shows);
-				$this->resprints .= '<td class="nowraponall">'.$creditTypes->label.'</td>';
+				$this->resprints .= '<td class="nowraponall">'.dol_escape_htmltag($creditTypes->label).'</td>';
 			} else {
-				$this->resprints .= '<td class="nowraponall">EMPTY</td>';
+				$this->resprints .= '<td class="nowraponall"><span class="opacitymedium">'.$langs->trans('None').'</span></td>';
 			}
 			// credit status affiche logics
 
 			if ($fk_credits_status_shows) {
 				$creditStatus = new CreditStatus($this->db);
 				$creditStatus->fetch($fk_credits_status_shows);
-				$this->resprints .= '<td class="nowraponall">'.$creditStatus->status_name.'</td>';
+				$this->resprints .= '<td class="nowraponall">'.dol_escape_htmltag($creditStatus->status_name).'</td>';
 			} else {
-				$this->resprints .= '<td class="nowraponall">EMPTY</td>';
+				$this->resprints .= '<td class="nowraponall"><span class="opacitymedium">'.$langs->trans('None').'</span></td>';
 			}
 			
 		}
@@ -91,32 +98,15 @@ class ActionsCreditmanager extends CommonHookActions
 		}
 
 		if (!is_object($timespent)) {
-			$this->resprints = '<td></td>';
+			$this->resprints = '<td></td><td></td>';
 			return 0;
 		}
 
 		if ($action === 'editline' && GETPOSTINT('lineid') === (int) $timespent->rowid) {
 			$correspondingData = $this->withTimespentIdReturnCorrecpondingCreditStatusAndTypes($timespent->rowid);
 			$this->resprints = '<td class="nowraponall">'.$this->renderCreditTypeSelect(GETPOSTINT('fk_credits_types')?: (int) $correspondingData["fk_credits_types_shows"], 'fk_credits_types').'</td>';
-			$this->resprints .= '<td class="nowraponall">'.$this->renderCreditStatusSelect($correspondingData["fk_credits_status_shows"], 'fk_credits_status').'</td>';
+			$this->resprints .= '<td class="nowraponall">'.$this->renderCreditStatusSelect(GETPOSTINT('fk_credits_status') ?: (int) $correspondingData["fk_credits_status_shows"], 'fk_credits_status').'</td>';
 			return 0;
-		}
-
-		if ($mode === 'split1' || $mode === 'split2') {
-			$this->resprints = '<td></td>';
-			return 0;
-		}
-
-		$label = '';
-		if (!empty($timespent->fk_credit_type)) {
-			$creditType = new CreditType($this->db);
-			if ($creditType->fetch((int) $timespent->fk_credit_type) > 0) {
-				$label = $creditType->label;
-			}
-		}
-
-		if ($label === '') {
-			$label = '<span class="opacitymedium">'.$langs->trans('None').'</span>';
 		}
 
 		return 0;
@@ -128,7 +118,7 @@ class ActionsCreditmanager extends CommonHookActions
 			return false;
 		}
 
-		$contexts = explode(':', (string) $parameters['context']);
+		$contexts = explode(':', (string) $parameters['currentcontext']);
 		return in_array('tasktimelist', $contexts, true);
 	}
 
@@ -216,8 +206,22 @@ class ActionsCreditmanager extends CommonHookActions
 			return '<span class="opacitymedium">'.$langs->trans('NoRecordFound').'</span>';
 		}
 
+		$selectedIsLocked = false;
+		foreach ($list as $item) {
+			if ((int) $item->rowid === (int) $selectedId
+				&& !in_array(strtoupper($item->status_name), array('DRAFT', 'SUBMITTED'), true)) {
+				$selectedIsLocked = true;
+				break;
+			}
+		}
+
 		$options = array('' => $langs->trans('SelectCreditStatus'));
 		foreach ($list as $item) {
+			$name = strtoupper($item->status_name);
+			if (($selectedIsLocked && (int) $item->rowid !== (int) $selectedId)
+				|| (!$selectedIsLocked && !in_array($name, array('DRAFT', 'SUBMITTED'), true))) {
+				continue;
+			}
 			$options[(string) $item->rowid] = $item->status_name;
 		}
 
