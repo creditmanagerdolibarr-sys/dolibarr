@@ -25,7 +25,6 @@
 require_once DOL_DOCUMENT_ROOT.'/core/triggers/dolibarrtriggers.class.php';
 require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/class/CreditDebit.class.php';
 require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/class/CreditType.class.php';
-require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/class/CreditStatus.class.php';
 require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/class/CreditStatusTypesAndTimesheets.class.php';
 
 /**
@@ -65,142 +64,30 @@ class InterfaceCreditManagerTriggers extends DolibarrTriggers
 
 		if ($action === 'TASK_TIMESPENT_CREATE') {
 			$creditTM = new CreditStatusTypesAndTimesheets($this->db);
-			$creditTM->fk_element_time = (int) $object->timespent_id;
-			$creditTM->fk_credits_types = GETPOSTINT('fk_credits_types') ?: null;
-			$creditTM->fk_credits_status = GETPOSTINT('fk_credits_status') ?: null;
-			if (!empty($creditTM->fk_credits_types)) {
-				$creditType = new CreditType($this->db);
-				if ($creditType->fetch((int) $creditTM->fk_credits_types) <= 0 || empty($creditType->active)) {
-					$this->error = 'Credit type not found or inactive';
-					return -1;
-				}
-			}
-			$status = new CreditStatus($this->db);
-			if (empty($creditTM->fk_credits_status)) {
-				$creditTM->fk_credits_status = $status->getIdByName('DRAFT') ?: null;
-			} elseif ($status->fetch((int) $creditTM->fk_credits_status) <= 0
-				|| !in_array(strtoupper($status->status_name), array('DRAFT', 'SUBMITTED'), true)) {
-				$this->error = 'Only DRAFT or SUBMITTED is allowed when creating a timesheet';
-				return -1;
-			}
-			if ($creditTM->fk_element_time > 0 && $creditTM->create() < 0) {
-				$this->error = $creditTM->error;
-				return -1;
-			}
+			$creditTM->fk_element_time = (int)$object->timespent_id;
+			$fk_credits_types_selected = GETPOST('fk_credits_types');
+			$fk_credits_status_selected = GETPOST('fk_credits_status');
+			$creditTM->fk_credits_status = (int) $fk_credits_status_selected ? (int) $fk_credits_status_selected : "NULL";
+			$creditTM->fk_credits_types = (int) $fk_credits_types_selected ? (int) $fk_credits_types_selected : "NULL";
+
+			$creditTM->create();
 		}
 
 		if ($action === 'TASK_TIMESPENT_MODIFY') {
+
 			$creditTM = new CreditStatusTypesAndTimesheets($this->db);
-			$timespentId = (int) $object->timespent_id;
-			if ($timespentId <= 0) {
-				return 0;
-			}
-			$current = $creditTM->fetch($timespentId);
-			if ($current < 0) {
-				$this->error = $creditTM->error;
-				return -1;
-			}
-			$creditTM->fk_element_time = $timespentId;
-			$oldTypeId = $current > 0 ? (int) $creditTM->fk_credits_types : 0;
-			$oldStatusId = $current > 0 ? (int) $creditTM->fk_credits_status : 0;
-			$oldStatusName = 'DRAFT';
-			if ($oldStatusId > 0) {
-				$status = new CreditStatus($this->db);
-				if ($status->fetch($oldStatusId) <= 0) {
-					$this->error = 'Invalid current credit status';
-					return -1;
-				}
-				$oldStatusName = strtoupper(trim($status->status_name));
-			}
-			if ($current === 0) {
-				$status = new CreditStatus($this->db);
-				$creditTM->fk_credits_status = $status->getIdByName('DRAFT') ?: null;
-				$creditTM->fk_credits_types = null;
-			}
-			if (GETPOSTISSET('fk_credits_types')) {
-				$creditTM->fk_credits_types = GETPOSTINT('fk_credits_types') ?: null;
-				if (!empty($creditTM->fk_credits_types)) {
-					$creditType = new CreditType($this->db);
-					if ($creditType->fetch((int) $creditTM->fk_credits_types) <= 0 || empty($creditType->active)) {
-						$this->error = 'Credit type not found or inactive';
-						return -1;
-					}
-				}
-			}
-			if (GETPOSTISSET('fk_credits_status')) {
-				$newStatusId = GETPOSTINT('fk_credits_status');
-				$status = new CreditStatus($this->db);
-				if ($newStatusId <= 0 || $status->fetch($newStatusId) <= 0) {
-					$this->error = 'Invalid credit status';
-					return -1;
-				}
-				$newStatusName = strtoupper(trim($status->status_name));
-				$isSubmissionTransition = in_array($oldStatusName, array('DRAFT', 'SUBMITTED'), true)
-					&& in_array($newStatusName, array('DRAFT', 'SUBMITTED'), true);
-				if ($newStatusName !== $oldStatusName && !$isSubmissionTransition) {
-					$this->error = 'This credit status transition requires the dedicated workflow action';
-					return -1;
-				}
-				$creditTM->fk_credits_status = $newStatusId;
-			}
-			$hasChanges = $current === 0
-				|| $oldTypeId !== (int) $creditTM->fk_credits_types
-				|| $oldStatusId !== (int) $creditTM->fk_credits_status;
-			$durationChanged = isset($object->timespent_old_duration)
-				&& (int) $object->timespent_old_duration !== (int) $object->timespent_duration;
-			if ($current > 0 && ($hasChanges || $durationChanged)) {
-				$creditDebit = new CreditDebit($this->db);
-				$hasActiveDebit = $creditDebit->hasActiveDebit($timespentId);
-				if ($hasActiveDebit < 0) {
-					$this->error = $creditDebit->error;
-					return -1;
-				}
-				if ($hasActiveDebit > 0) {
-					$status = new CreditStatus($this->db);
-					if ($status->fetch((int) $creditTM->fk_credits_status) <= 0) {
-						$this->error = 'Invalid credit status';
-						return -1;
-					}
-					$desiredStatus = strtoupper(trim($status->status_name));
-					if ($creditDebit->refundCredits($timespentId) < 0) {
-						$this->error = $creditDebit->error;
-						return -1;
-					}
-					if ($desiredStatus === 'DEBITED') {
-						if (empty($creditTM->fk_credits_types) || $creditDebit->debitCreditsFromTimesheet($timespentId, (int) $creditTM->fk_credits_types) < 0) {
-							$this->error = $creditDebit->error ?: 'Credit type is required';
-							return -1;
-						}
-					} else {
-						$link = new CreditStatusTypesAndTimesheets($this->db);
-						if ($link->setMetadata($timespentId, (int) $creditTM->fk_credits_types, $desiredStatus) < 0) {
-							$this->error = $link->error;
-							return -1;
-						}
-					}
-					return 1;
-				}
-			}
-			$result = !$hasChanges ? 1 : ($current > 0 ? $creditTM->update() : $creditTM->create());
-			if ($result < 0) {
-				$this->error = $creditTM->error;
-				return -1;
-			}
+			$creditTM->fk_element_time = (int)$object->timespent_id;
+			$fk_credits_types_selected = GETPOSTINT('fk_credits_types');
+			$fk_credits_status_selected = GETPOSTINT('fk_credits_status');
+			$creditTM->fk_credits_status = (int) $fk_credits_status_selected ? (int) $fk_credits_status_selected : "NULL";
+			$creditTM->fk_credits_types = (int) $fk_credits_types_selected ? (int) $fk_credits_types_selected : "NULL";
+			
+			$creditTM->update();
 		}
 
 		// Timesheet entry deleted → refund any debit movement linked to it
 		if ($action === 'TASK_TIMESPENT_DELETE' || $action === 'TIMESPENT_DELETE') {
-			$result = $this->handleTimespentDelete($object);
-			if ($result < 0) {
-				return -1;
-			}
-			$timespentId = !empty($object->timespent_id) ? (int) $object->timespent_id : (int) $object->id;
-			$link = new CreditStatusTypesAndTimesheets($this->db);
-			if ($timespentId > 0 && $link->deleteByTimesheet($timespentId) < 0) {
-				$this->error = $link->error;
-				return -1;
-			}
-			return $result;
+			//return $this->handleTimespentDelete($object);
 		}
 
 		return 0;
@@ -251,4 +138,79 @@ class InterfaceCreditManagerTriggers extends DolibarrTriggers
 		return 1;
 	}
 
+	private function handleTaskTimespentUpsert($action, $object)
+	{
+		$fk_element_time = (int) $object->timespent_id;
+		if ($fk_element_time <= 0) {
+			return 0;
+		}
+
+		$creditDebit = new CreditDebit($this->db);
+		$currentData = $this->getTimesheetCreditData($fk_element_time);
+		$newCreditTypeId = GETPOSTISSET('fk_credit_type') ? GETPOSTINT('fk_credit_type') : (int) $currentData['fk_credit_type'];
+		$hadActiveDebit = $creditDebit->hasActiveDebit($fk_element_time);
+		if ($hadActiveDebit < 0) {
+			$this->error = $creditDebit->error;
+			return -1;
+		}
+
+		$typeChanged = ((int) $currentData['fk_credit_type'] !== $newCreditTypeId);
+		$durationChanged = ($action === 'TASK_TIMESPENT_MODIFY' && isset($object->timespent_old_duration) && (int) $object->timespent_old_duration !== (int) $object->timespent_duration);
+
+		if (($typeChanged || $durationChanged) && $hadActiveDebit > 0) {
+			$result = $creditDebit->refundCredits($fk_element_time);
+			if ($result < 0) {
+				$this->error = $creditDebit->error;
+				return -1;
+			}
+			$hadActiveDebit = 0;
+		}
+
+		if (!$creditDebit->saveTimesheetCreditType($fk_element_time, $newCreditTypeId)) {
+			$this->error = $creditDebit->error;
+			return -1;
+		}
+
+		if ($newCreditTypeId <= 0) {
+			return 0;
+		}
+
+		$creditType = new CreditType($this->db);
+		if ($creditType->fetch($newCreditTypeId) <= 0) {
+			$this->error = 'Credit type not found';
+			return -1;
+		}
+
+		if ($creditType->isAutoDebit() && $hadActiveDebit === 0) {
+			$result = $creditDebit->debitCreditsFromTimesheet($fk_element_time, $newCreditTypeId);
+			if ($result < 0) {
+				$this->error = $creditDebit->error;
+				return -1;
+			}
+			return 1;
+		}
+
+		return 0;
+	}
+
+	private function getTimesheetCreditData($fk_element_time)
+	{
+		$sql = "SELECT fk_credit_type, credit_status FROM ".$this->db->prefix()."element_time WHERE rowid = ".((int) $fk_element_time);
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			return array('fk_credit_type' => 0, 'credit_status' => '');
+		}
+
+		$obj = $this->db->fetch_object($resql);
+		$this->db->free($resql);
+
+		if (!$obj) {
+			return array('fk_credit_type' => 0, 'credit_status' => '');
+		}
+
+		return array(
+			'fk_credit_type' => $obj->fk_credit_type ? (int) $obj->fk_credit_type : 0,
+			'credit_status' => (string) $obj->credit_status,
+		);
+	}
 }

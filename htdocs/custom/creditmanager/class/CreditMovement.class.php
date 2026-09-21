@@ -89,9 +89,6 @@ class CreditMovement extends CommonObject
 	 */
 	public $description;
 
-	/** @var string|null Stable movement reference */
-	public $reference;
-
 	/**
 	 * @var int|null Timesheet ID
 	 */
@@ -149,12 +146,9 @@ class CreditMovement extends CommonObject
 	{
 		$hasFkElementTime = $this->hasTableColumn('fk_element_time');
 		$hasTimesheetElementType = $this->hasTableColumn('timesheet_elementtype');
-		$hasReference = $this->hasTableColumn('reference');
 
 		$sql = "SELECT rowid, entity, fk_soc, fk_credit_type, date_movement, amount, balance_after,";
-		$sql .= " type_movement, description,";
-		$sql .= ($hasReference ? " reference," : " NULL as reference,");
-		$sql .= " fk_timesheet,";
+		$sql .= " type_movement, description, fk_timesheet,";
 		$sql .= ($hasFkElementTime ? " fk_element_time," : " NULL as fk_element_time,");
 		$sql .= ($hasTimesheetElementType ? " timesheet_elementtype," : " NULL as timesheet_elementtype,");
 		$sql .= " fk_invoice, fk_attribution,";
@@ -176,7 +170,6 @@ class CreditMovement extends CommonObject
 				$this->balance_after = (float) $obj->balance_after;
 				$this->type_movement = $obj->type_movement;
 				$this->description = $obj->description;
-				$this->reference = $obj->reference;
 				$this->fk_timesheet = $obj->fk_timesheet ? (int) $obj->fk_timesheet : null;
 				$this->fk_element_time = $obj->fk_element_time ? (int) $obj->fk_element_time : null;
 				$this->timesheet_elementtype = $obj->timesheet_elementtype;
@@ -206,7 +199,6 @@ class CreditMovement extends CommonObject
 		global $conf;
 		$hasFkElementTime = $this->hasTableColumn('fk_element_time');
 		$hasTimesheetElementType = $this->hasTableColumn('timesheet_elementtype');
-		$hasReference = $this->hasTableColumn('reference');
 
 		if (empty($this->fk_soc) || empty($this->fk_credit_type) || empty($this->type_movement)) {
 			$this->error = 'fk_soc, fk_credit_type and type_movement are required';
@@ -229,11 +221,7 @@ class CreditMovement extends CommonObject
 
 		$sql = "INSERT INTO ".$this->db->prefix().$this->table_element;
 		$sql .= " (entity, fk_soc, fk_credit_type, date_movement, amount, balance_after,";
-		$sql .= " type_movement, description,";
-		if ($hasReference) {
-			$sql .= " reference,";
-		}
-		$sql .= " fk_timesheet,";
+		$sql .= " type_movement, description, fk_timesheet,";
 		if ($hasFkElementTime) {
 			$sql .= " fk_element_time,";
 		}
@@ -251,9 +239,6 @@ class CreditMovement extends CommonObject
 		$sql .= ((float) $this->balance_after).", ";
 		$sql .= "'".$this->db->escape($this->type_movement)."', ";
 		$sql .= ($this->description ? "'".$this->db->escape($this->description)."'" : "NULL").", ";
-		if ($hasReference) {
-			$sql .= ($this->reference ? "'".$this->db->escape($this->reference)."'" : "NULL").", ";
-		}
 		$sql .= ($this->fk_timesheet ? ((int) $this->fk_timesheet) : "NULL").", ";
 		if ($hasFkElementTime) {
 			$sql .= ($this->fk_element_time ? ((int) $this->fk_element_time) : "NULL").", ";
@@ -287,29 +272,6 @@ class CreditMovement extends CommonObject
 
 		$this->db->commit();
 		return $this->id;
-	}
-
-	/**
-	 * Set a stable reference after movement creation.
-	 *
-	 * @param string $reference Movement reference
-	 * @return int <0 if KO, >0 if OK
-	 */
-	public function setReference($reference)
-	{
-		if (empty($this->id) || !$this->hasTableColumn('reference')) {
-			$this->error = 'Movement reference column is unavailable';
-			return -1;
-		}
-		$sql = "UPDATE ".$this->db->prefix().$this->table_element;
-		$sql .= " SET reference = '".$this->db->escape($reference)."'";
-		$sql .= " WHERE rowid = ".((int) $this->id);
-		if (!$this->db->query($sql)) {
-			$this->error = $this->db->lasterror();
-			return -1;
-		}
-		$this->reference = $reference;
-		return 1;
 	}
 
 	/**

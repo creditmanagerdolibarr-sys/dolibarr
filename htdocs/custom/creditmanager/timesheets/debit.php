@@ -117,21 +117,16 @@ function creditmanager_manual_debit_list_sql($db, $conf, $filters)
 	// List is driven only by llx_element_time + task/project (no llx_fichinter).
 	// Intervention context is carried by et.intervention_id / ref_ext on the row.
 	$sql = " FROM ".$db->prefix()."element_time AS et";
-	$sql .= " INNER JOIN ".$db->prefix()."credits_status_types_and_timesheets AS rel ON rel.fk_element_time = et.rowid";
-	$sql .= " INNER JOIN ".$db->prefix()."credits_status AS cs ON cs.rowid = rel.fk_credits_status";
-	$sql .= " INNER JOIN ".$db->prefix()."credits_types AS ct ON ct.rowid = rel.fk_credits_types AND ct.entity IN (".getEntity('credits_type').")";
+	$sql .= " INNER JOIN ".$db->prefix()."credits_types AS ct ON ct.rowid = et.fk_credit_type AND ct.entity IN (".getEntity('credits_type').")";
 	$sql .= " LEFT JOIN ".$db->prefix()."projet_task AS tsk ON tsk.rowid = et.fk_element AND et.elementtype = 'task'";
 	$sql .= " LEFT JOIN ".$db->prefix()."projet AS pr ON pr.rowid = tsk.fk_projet";
 	$sql .= " LEFT JOIN ".$db->prefix()."societe AS s ON s.rowid = pr.fk_soc";
 	$sql .= " LEFT JOIN ".$db->prefix()."user AS u ON u.rowid = et.fk_user";
 	$sql .= " WHERE et.elementtype = 'task'";
 	$sql .= " AND et.fk_element > 0";
-	$sql .= " AND rel.fk_credits_types IS NOT NULL AND rel.fk_credits_types > 0";
-	$sql .= " AND UPPER(TRIM(cs.status_name)) = 'APPROVED'";
-	$sql .= " AND NOT EXISTS (SELECT 1 FROM ".$db->prefix()."credits_movements AS md";
-	$sql .= " WHERE md.fk_element_time = et.rowid AND md.type_movement = 'DEBIT'";
-	$sql .= " AND NOT EXISTS (SELECT 1 FROM ".$db->prefix()."credits_movements AS mr";
-	$sql .= " WHERE mr.fk_parent_movement = md.rowid AND mr.type_movement = 'REFUND'))";
+	$sql .= " AND et.fk_credit_type IS NOT NULL AND et.fk_credit_type > 0";
+	$sql .= " AND UPPER(TRIM(et.credit_status)) = 'APPROVED'";
+	$sql .= " AND (et.credit_debit_reference IS NULL OR et.credit_debit_reference = '')";
 
 	if (!empty($filters['socid'])) {
 		$sql .= " AND pr.fk_soc = ".((int) $filters['socid']);
@@ -140,15 +135,14 @@ function creditmanager_manual_debit_list_sql($db, $conf, $filters)
 		$sql .= " AND pr.rowid = ".((int) $filters['projectid']);
 	}
 	if (!empty($filters['credit_type'])) {
-		$sql .= " AND rel.fk_credits_types = ".((int) $filters['credit_type']);
+		$sql .= " AND et.fk_credit_type = ".((int) $filters['credit_type']);
 	}
 	if (!empty($filters['manual_only'])) {
 		$sql .= " AND ct.auto_debit = 0 AND ct.debit_delay_days IS NULL";
 	}
 	if (!empty($filters['deferred_due'])) {
-		$sql .= " AND ct.auto_debit = 0 AND ct.debit_delay_days IS NOT NULL";
-		$sql .= " AND rel.approval_date IS NOT NULL";
-		$sql .= " AND DATE_ADD(rel.approval_date, INTERVAL ct.debit_delay_days DAY) <= '".$db->idate(dol_now())."'";
+		$sql .= " AND ct.auto_debit = 0 AND ct.debit_delay_days IS NOT NULL AND et.credit_approval_date IS NOT NULL";
+		$sql .= " AND DATE_ADD(et.credit_approval_date, INTERVAL ct.debit_delay_days DAY) <= '".$db->idate(dol_now())."'";
 	}
 	if (!empty($filters['fk_user'])) {
 		$sql .= " AND et.fk_user = ".((int) $filters['fk_user']);
@@ -181,11 +175,10 @@ function creditmanager_manual_debit_list_sql($db, $conf, $filters)
  */
 function creditmanager_element_time_debit_preview($db, $fk_element_time)
 {
-	$sql = "SELECT et.rowid, et.element_duration, rel.fk_credits_types AS fk_credit_type,";
+	$sql = "SELECT et.rowid, et.element_duration, et.fk_credit_type,";
 	$sql .= " COALESCE(pr.fk_soc, 0) AS line_soc,";
 	$sql .= " COALESCE(pr.rowid, 0) AS line_proj";
 	$sql .= " FROM ".$db->prefix()."element_time AS et";
-	$sql .= " INNER JOIN ".$db->prefix()."credits_status_types_and_timesheets AS rel ON rel.fk_element_time = et.rowid";
 	$sql .= " LEFT JOIN ".$db->prefix()."projet_task AS tsk ON tsk.rowid = et.fk_element AND et.elementtype = 'task'";
 	$sql .= " LEFT JOIN ".$db->prefix()."projet AS pr ON pr.rowid = tsk.fk_projet";
 	$sql .= " WHERE et.rowid = ".((int) $fk_element_time);
@@ -233,9 +226,9 @@ if ($sortfield === 'hours') {
 }
 $sortSql .= ' '.$sortorder;
 
-$sqlSelect = "SELECT et.rowid, et.elementtype, et.fk_element, et.element_duration, et.element_date, et.note, et.fk_user, rel.fk_credits_types AS fk_credit_type,";
+$sqlSelect = "SELECT et.rowid, et.elementtype, et.fk_element, et.element_duration, et.element_date, et.note, et.fk_user, et.fk_credit_type,";
 $sqlSelect .= " et.ref_ext, et.intervention_id, et.intervention_line_id,";
-$sqlSelect .= " rel.approval_date AS credit_approval_date, ct.code AS type_code, ct.label AS type_label, ct.auto_debit, ct.debit_delay_days,";
+$sqlSelect .= " et.credit_approval_date, ct.code AS type_code, ct.label AS type_label, ct.auto_debit, ct.debit_delay_days,";
 $sqlSelect .= " u.login, u.firstname, u.lastname,";
 $sqlSelect .= " COALESCE(NULLIF(TRIM(et.ref_ext), ''), tsk.ref, '') AS origin_ref,";
 $sqlSelect .= " COALESCE(pr.fk_soc, 0) AS line_soc,";
@@ -386,7 +379,7 @@ print '<tr class="oddeven">';
 print '<td>';
 print $form->select_company($search_socid, 'search_socid', '', 1, 0, 0, array(), 0, 'minwidth200', '', 0, 0, array(), false);
 print '</td><td>';
-print $formproject->select_projects($search_socid > 0 ? $search_socid : -1, $search_projectid, 'search_projectid', 24, 0, 1, 0, 0, 0, 0, '', 0, 0, 'maxwidth300', '', '');
+print $formproject->select_projects($search_socid > 0 ? $search_socid : -1, $search_projectid, 'search_projectid', 24, 0, 1, 0, 0, 0, '', '', 0, 0, 'maxwidth300', '', '');
 print '</td><td>';
 $sqlTypes = 'SELECT rowid, code FROM '.$db->prefix().'credits_types WHERE entity IN ('.$entityType.') AND active = 1 ORDER BY code';
 $resTypes = $db->query($sqlTypes);

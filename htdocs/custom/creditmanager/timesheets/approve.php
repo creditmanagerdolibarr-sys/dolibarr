@@ -91,18 +91,15 @@ creditmanagerValidateFinancialScopeSocId($financialScope, $search_socid, $db);
 function creditmanager_approve_list_sql($db, $user, $filters)
 {
 	$sql = " FROM ".$db->prefix()."element_time AS et";
-	$sql .= " INNER JOIN ".$db->prefix()."credits_status_types_and_timesheets AS rel ON rel.fk_element_time = et.rowid";
-	$sql .= " INNER JOIN ".$db->prefix()."credits_status AS cs ON cs.rowid = rel.fk_credits_status";
-	$sql .= " LEFT JOIN ".$db->prefix()."credits_types AS ct ON ct.rowid = rel.fk_credits_types AND ct.entity IN (".getEntity('credits_type').")";
+	$sql .= " LEFT JOIN ".$db->prefix()."credits_types AS ct ON ct.rowid = et.fk_credit_type AND ct.entity IN (".getEntity('credits_type').")";
 	$sql .= " LEFT JOIN ".$db->prefix()."projet_task AS tsk ON tsk.rowid = et.fk_element AND et.elementtype = 'task'";
 	$sql .= " LEFT JOIN ".$db->prefix()."projet AS pr ON pr.rowid = tsk.fk_projet";
 	$sql .= " LEFT JOIN ".$db->prefix()."societe AS s ON s.rowid = pr.fk_soc";
 	$sql .= " LEFT JOIN ".$db->prefix()."user AS u ON u.rowid = et.fk_user";
 	$sql .= " WHERE et.elementtype = 'task'";
 	$sql .= " AND et.fk_element > 0";
-	$sql .= " AND UPPER(TRIM(cs.status_name)) = 'SUBMITTED'";
-	$sql .= " AND NOT EXISTS (SELECT 1 FROM ".$db->prefix()."credits_movements AS md";
-	$sql .= " WHERE md.fk_element_time = et.rowid AND md.type_movement = 'DEBIT')";
+	$sql .= " AND UPPER(TRIM(et.credit_status)) = 'SUBMITTED'";
+	$sql .= " AND (et.credit_debit_reference IS NULL OR et.credit_debit_reference = '')";
 
 	$sql .= creditmanagerTimesheetScopeProjectWhereSql($db, $user, 'pr');
 
@@ -172,7 +169,7 @@ if ($action === 'reject' && GETPOST('token', 'alpha')) {
 
 $sortSql = ' ORDER BY '.$db->escape($sortfield).' '.$db->escape($sortorder);
 
-$sqlSelect = "SELECT et.rowid, et.element_duration, et.element_date, et.note, et.fk_user, rel.fk_credits_types AS fk_credit_type,";
+$sqlSelect = "SELECT et.rowid, et.element_duration, et.element_date, et.note, et.fk_user, et.fk_credit_type,";
 $sqlSelect .= " et.ref_ext, u.login,";
 $sqlSelect .= " COALESCE(NULLIF(TRIM(et.ref_ext), ''), tsk.ref, '') AS origin_ref,";
 $sqlSelect .= " pr.rowid AS line_proj, pr.ref AS project_ref, pr.title AS project_title,";
@@ -238,7 +235,7 @@ print '<tr class="oddeven">';
 print '<td>';
 creditmanagerPrintScopedCompanySelect($form, $db, $financialScope, $search_socid, 'search_socid', $entitySoc);
 print '</td><td>';
-print $formproject->select_projects($search_socid > 0 ? $search_socid : -1, $search_projectid, 'search_projectid', 24, 0, 1, 0, 0, 0, 0, '', 0, 0, 'maxwidth300', '', '');
+print $formproject->select_projects($search_socid > 0 ? $search_socid : -1, $search_projectid, 'search_projectid', 24, 0, 1, 0, 0, 0, '', '', 0, 0, 'maxwidth300', '', '');
 print '</td><td colspan="2" class="nowrap">';
 print $form->selectDate($search_date_start ?: -1, 'search_date_start_', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('From'));
 print ' ';

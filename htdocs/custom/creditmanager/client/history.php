@@ -200,7 +200,7 @@ function creditmanager_client_history_where($db, $filters)
 	}
 	if (!empty($filters['search_text'])) {
 		$sql .= natural_search(
-			array('m.description', 'm.reference', 't.code', 't.label', 'pr.ref'),
+			array('m.description', 't.code', 't.label', 'et.credit_debit_reference'),
 			$filters['search_text']
 		);
 	}
@@ -209,9 +209,10 @@ function creditmanager_client_history_where($db, $filters)
 	}
 	// Status: validated = posted movements; pending = debit linked to non-DEBITED timesheet (edge), else attributions always validated
 	if (!empty($filters['status']) && $filters['status'] === 'validated') {
-		$sql .= " AND (et.rowid IS NULL OR UPPER(TRIM(COALESCE(cs.status_name, ''))) IN ('DEBITED', 'APPROVED', '') OR m.amount > 0)";
+		$sql .= " AND (et.rowid IS NULL OR UPPER(TRIM(COALESCE(et.credit_status, ''))) IN ('DEBITED', 'APPROVED', '') OR m.amount > 0)";
 	} elseif (!empty($filters['status']) && $filters['status'] === 'pending') {
-		$sql .= " AND et.rowid IS NOT NULL AND UPPER(TRIM(cs.status_name)) IN ('SUBMITTED', 'APPROVED') AND m.amount < 0";
+		$sql .= " AND et.rowid IS NOT NULL AND UPPER(TRIM(et.credit_status)) IN ('SUBMITTED', 'APPROVED') AND m.amount < 0";
+		$sql .= " AND (et.credit_debit_reference IS NULL OR et.credit_debit_reference = '')";
 	}
 
 	return $sql;
@@ -235,8 +236,6 @@ $filters = array(
 $fromSql = " FROM ".$db->prefix()."credits_movements as m";
 $fromSql .= " INNER JOIN ".$db->prefix()."credits_types as t ON t.rowid = m.fk_credit_type";
 $fromSql .= " LEFT JOIN ".$db->prefix()."element_time as et ON et.rowid = COALESCE(m.fk_element_time, m.fk_timesheet)";
-$fromSql .= " LEFT JOIN ".$db->prefix()."credits_status_types_and_timesheets as rel ON rel.fk_element_time = et.rowid";
-$fromSql .= " LEFT JOIN ".$db->prefix()."credits_status as cs ON cs.rowid = rel.fk_credits_status";
 $fromSql .= " LEFT JOIN ".$db->prefix()."projet_task as tsk ON tsk.rowid = et.fk_element AND et.elementtype = 'task'";
 $fromSql .= " LEFT JOIN ".$db->prefix()."projet as pr ON pr.rowid = tsk.fk_projet AND pr.entity IN (".$entityProject.")";
 $fromSql .= " LEFT JOIN ".$db->prefix()."facture as f ON f.rowid = m.fk_invoice";
@@ -249,7 +248,7 @@ $whereSql = creditmanager_client_history_where($db, $filters);
 if (in_array($action, array('exportcsv', 'exportpdf'), true)) {
 	$sqlExport = "SELECT m.rowid, m.date_movement, m.amount, m.balance_after, m.type_movement, m.description,";
 	$sqlExport .= " t.code as type_code, t.label as type_label,";
-		$sqlExport .= " COALESCE(NULLIF(m.reference, ''), CONCAT('MVT-', m.rowid)) as credit_debit_reference, cs.status_name as credit_status,";
+	$sqlExport .= " et.credit_debit_reference, et.credit_status,";
 	$sqlExport .= " pr.ref as project_ref, f.ref as invoice_ref";
 	$sqlExport .= $fromSql.$whereSql;
 	$sqlExport .= " ORDER BY m.date_movement DESC, m.rowid DESC";
@@ -314,7 +313,7 @@ if ($resCount) {
 $sqlList = "SELECT m.rowid, m.date_movement, m.amount, m.balance_after, m.type_movement, m.description,";
 $sqlList .= " m.fk_invoice, m.fk_element_time, m.fk_timesheet,";
 $sqlList .= " t.code as type_code, t.label as type_label,";
-$sqlList .= " COALESCE(NULLIF(m.reference, ''), CONCAT('MVT-', m.rowid)) as credit_debit_reference, cs.status_name as credit_status, et.rowid as timesheet_id,";
+$sqlList .= " et.credit_debit_reference, et.credit_status, et.rowid as timesheet_id,";
 $sqlList .= " pr.rowid as project_id, pr.ref as project_ref, pr.title as project_title,";
 $sqlList .= " f.rowid as invoice_id, f.ref as invoice_ref, f.last_main_doc as invoice_doc";
 $sqlList .= $fromSql.$whereSql;

@@ -314,12 +314,10 @@ if (!empty($projectRows)) {
 
 	$sqlPending = "SELECT pr.rowid as fk_project, COUNT(DISTINCT et.rowid) as nb_pending";
 	$sqlPending .= " FROM ".MAIN_DB_PREFIX."element_time as et";
-	$sqlPending .= " INNER JOIN ".MAIN_DB_PREFIX."credits_status_types_and_timesheets as rel ON rel.fk_element_time = et.rowid";
-	$sqlPending .= " INNER JOIN ".MAIN_DB_PREFIX."credits_status as cs ON cs.rowid = rel.fk_credits_status";
 	$sqlPending .= " INNER JOIN ".MAIN_DB_PREFIX."projet_task as tsk ON tsk.rowid = et.fk_element AND et.elementtype = 'task'";
 	$sqlPending .= " INNER JOIN ".MAIN_DB_PREFIX."projet as pr ON pr.rowid = tsk.fk_projet";
 	$sqlPending .= " WHERE et.elementtype = 'task'";
-	$sqlPending .= " AND UPPER(TRIM(cs.status_name)) = 'SUBMITTED'";
+	$sqlPending .= " AND UPPER(TRIM(et.credit_status)) = 'SUBMITTED'";
 	$sqlPending .= " AND pr.rowid IN (".$projectIdList.")";
 	$sqlPending .= creditmanagerTimesheetScopeProjectWhereSql($db, $user, 'pr');
 	$sqlPending .= " GROUP BY pr.rowid";
@@ -336,17 +334,15 @@ if (!empty($projectRows)) {
 
 	$sqlHours = "SELECT pr.rowid as fk_project, SUM(COALESCE(et.element_duration, 0)) as total_seconds";
 	$sqlHours .= " FROM ".MAIN_DB_PREFIX."element_time as et";
-	$sqlHours .= " INNER JOIN ".MAIN_DB_PREFIX."credits_status_types_and_timesheets as rel ON rel.fk_element_time = et.rowid";
-	$sqlHours .= " INNER JOIN ".MAIN_DB_PREFIX."credits_status as cs ON cs.rowid = rel.fk_credits_status";
 	$sqlHours .= " INNER JOIN ".MAIN_DB_PREFIX."projet_task as tsk ON tsk.rowid = et.fk_element AND et.elementtype = 'task'";
 	$sqlHours .= " INNER JOIN ".MAIN_DB_PREFIX."projet as pr ON pr.rowid = tsk.fk_projet";
 	$sqlHours .= " WHERE et.elementtype = 'task'";
-	$sqlHours .= " AND UPPER(TRIM(cs.status_name)) IN ('SUBMITTED','APPROVED','DEBITED')";
+	$sqlHours .= " AND UPPER(TRIM(et.credit_status)) IN ('SUBMITTED','APPROVED','DEBITED')";
 	$sqlHours .= " AND et.element_date >= '".$db->idate($date_start)."'";
 	$sqlHours .= " AND et.element_date <= '".$db->idate($date_end)."'";
 	$sqlHours .= " AND pr.rowid IN (".$projectIdList.")";
 	if (!empty($search_typeids)) {
-		$sqlHours .= " AND rel.fk_credits_types IN (".implode(',', $search_typeids).")";
+		$sqlHours .= " AND et.fk_credit_type IN (".implode(',', $search_typeids).")";
 	}
 	$sqlHours .= creditmanagerTimesheetScopeProjectWhereSql($db, $user, 'pr');
 	$sqlHours .= " GROUP BY pr.rowid";
@@ -399,12 +395,10 @@ $projectRows = array_values($projectRows);
 // ---------------------------------------------------------------------------
 $sqlPendingCount = "SELECT COUNT(DISTINCT et.rowid) as nb";
 $sqlPendingCount .= " FROM ".MAIN_DB_PREFIX."element_time as et";
-$sqlPendingCount .= " INNER JOIN ".MAIN_DB_PREFIX."credits_status_types_and_timesheets as rel ON rel.fk_element_time = et.rowid";
-$sqlPendingCount .= " INNER JOIN ".MAIN_DB_PREFIX."credits_status as cs ON cs.rowid = rel.fk_credits_status";
 $sqlPendingCount .= " LEFT JOIN ".MAIN_DB_PREFIX."projet_task as tsk ON tsk.rowid = et.fk_element AND et.elementtype = 'task'";
 $sqlPendingCount .= " LEFT JOIN ".MAIN_DB_PREFIX."projet as pr ON pr.rowid = tsk.fk_projet";
 $sqlPendingCount .= " WHERE et.elementtype = 'task'";
-$sqlPendingCount .= " AND UPPER(TRIM(cs.status_name)) = 'SUBMITTED'";
+$sqlPendingCount .= " AND UPPER(TRIM(et.credit_status)) = 'SUBMITTED'";
 $sqlPendingCount .= creditmanagerTimesheetScopeProjectWhereSql($db, $user, 'pr');
 if (!empty($search_socids)) {
 	$sqlPendingCount .= " AND pr.fk_soc IN (".implode(',', $search_socids).")";
