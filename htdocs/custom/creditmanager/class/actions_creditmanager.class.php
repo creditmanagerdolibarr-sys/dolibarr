@@ -39,17 +39,6 @@ class ActionsCreditmanager extends CommonHookActions
 		return 0;
 	}
 
-	public function printFieldListOption($parameters, &$object, &$action)
-	{
-		if (!$this->isTaskTimeListContext($parameters)) {
-			return 0;
-		}
-
-		$this->resprints = '<td class="liste_titre"></td>';
-		$this->resprints .= '<td class="liste_titre"></td>';
-		return 0;
-	}
-
 	public function printFieldListValue($parameters, &$object, &$action)
 	{
 		global $langs;
@@ -122,9 +111,54 @@ class ActionsCreditmanager extends CommonHookActions
 		return 0;
 	}
 
+	public function printFieldListOption($parameters, &$object, &$action)
+	{
+		global $langs;
+		$langs->load('creditmanager@creditmanager');
+
+		if (!$this->isTaskTimeListContext($parameters)) {
+			return 0;
+		}
+		$this->resprints = '<td class="nowraponall">'.$this->renderCreditTypeSelect(GETPOSTINT('search_credits_types'), 'search_credits_types').'</td>';
+		$this->resprints .= '<td class="nowraponall">'.$this->renderCreditStatusSelect(GETPOSTINT('search_credits_status'), 'search_credits_status').'</td>';
+	
+	}
+
+	public function printFieldListSelect($parameters, &$object, &$action, $hookmanager) {
+		global $conf;
+		if (!$this->isTaskTimeListContext($parameters)) {
+			return 0;
+		}
+		$this->resprints = "cstt.fk_element_time, cstt.fk_credits_status, cstt.fk_credits_types";
+	}
+
+	public function printFieldListFrom($parameters, &$object, &$action, $hookmanager) {
+		global $db;
+		if (!$this->isTaskTimeListContext($parameters)) {
+			return 0;
+		}
+		$this->resprints = " LEFT JOIN ".MAIN_DB_PREFIX."credits_status_types_and_timesheets as cstt ON cstt.fk_element_time = t.rowid";
+	}
+
+	public function printFieldListWhere($parameters, &$object, &$action, $hookmanager) {
+    	//global $db;
+		if (!$this->isTaskTimeListContext($parameters)) {
+			return 0;
+		}
+		$this->resprints = '';
+
+    	if (!empty($_POST['search_credits_status'])) {
+            $this->resprints .= " AND cstt.fk_credits_status = ".(int) $_POST['search_credits_status'];
+        }
+
+		if (!empty($_POST['search_credits_types'])) {
+            $this->resprints .= " AND cstt.fk_credits_types = ".(int) $_POST['search_credits_types'];
+        }
+	}
+
 	private function isTaskTimeListContext($parameters)
 	{
-		if (empty($parameters['currentcontext'])) {
+		if (empty($parameters['context'])) {
 			return false;
 		}
 
