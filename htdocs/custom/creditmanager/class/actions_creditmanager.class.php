@@ -27,23 +27,24 @@ class ActionsCreditmanager extends CommonHookActions
 
 	public function printFieldListTitle($parameters, &$object, &$action)
 	{
-		global $langs;
+		global $langs, $user;
 		$langs->load('creditmanager@creditmanager');
 
 		if (!$this->isTaskTimeListContext($parameters)) {
 			return 0;
 		}
-
-		$this->resprints = '<td class="liste_titre">'.$langs->trans('CreditType').'</td>';
+		if(! $this->userIsStaff($user)) {
+			$this->resprints = '<td class="liste_titre">'.$langs->trans('CreditType').'</td>';
+		}
 		$this->resprints .= '<td class="liste_titre">'.$langs->trans('CreditStatus').'</td>';
 		return 0;
 	}
 
 	public function printFieldListValue($parameters, &$object, &$action)
 	{
-		global $langs;
+		global $langs, $user;
 		$langs->load('creditmanager@creditmanager');
-
+		echo var_dump($this->userIsStaff($user));
 		if (!$this->isTaskTimeListContext($parameters)) {
 			return 0;
 		}
@@ -55,13 +56,16 @@ class ActionsCreditmanager extends CommonHookActions
 		if ($mode !== 'create' && !($action === 'editline' && GETPOSTINT('lineid') === (int) $timespent->rowid)) {
 			["fk_credits_status_shows" => $fk_credits_status_shows, "fk_credits_types_shows" => $fk_credits_types_shows] = $this->withTimespentIdReturnCorrecpondingCreditStatusAndTypes($timespent->rowid);
 			//credits types logics
-			if ($fk_credits_types_shows) {
-				$creditTypes = new CreditType($this->db);
-				$creditTypes->fetch($fk_credits_types_shows);
-				$this->resprints .= '<td class="nowraponall">'.$creditTypes->label.'</td>';
-			} else {
-				$this->resprints .= '<td class="nowraponall">EMPTY</td>';
+			if(!$this->userIsStaff($user)) {
+				if ($fk_credits_types_shows) {
+					$creditTypes = new CreditType($this->db);
+					$creditTypes->fetch($fk_credits_types_shows);
+					$this->resprints .= '<td class="nowraponall">'.$creditTypes->label.'</td>';
+				} else {
+					$this->resprints .= '<td class="nowraponall">EMPTY</td>';
+				}
 			}
+			
 			// credit status affiche logics
 
 			if ($fk_credits_status_shows) {
@@ -74,7 +78,9 @@ class ActionsCreditmanager extends CommonHookActions
 			
 		}
 		if ($mode === 'create') {
-			$this->resprints = '<td class="nowraponall">'.$this->renderCreditTypeSelect(GETPOSTINT('fk_credits_types'), 'fk_credits_types').'</td>';
+			if(!$this->userIsStaff($user)) {
+				$this->resprints = '<td class="nowraponall">'.$this->renderCreditTypeSelect(GETPOSTINT('fk_credits_types'), 'fk_credits_types').'</td>';
+			}
 			$this->resprints .= '<td class="nowraponall">'.$this->renderCreditStatusSelect(GETPOSTINT('fk_credits_status'), 'fk_credits_status').'</td>';
 			return 0;
 		}
@@ -86,7 +92,9 @@ class ActionsCreditmanager extends CommonHookActions
 
 		if ($action === 'editline' && GETPOSTINT('lineid') === (int) $timespent->rowid) {
 			$correspondingData = $this->withTimespentIdReturnCorrecpondingCreditStatusAndTypes($timespent->rowid);
-			$this->resprints = '<td class="nowraponall">'.$this->renderCreditTypeSelect(GETPOSTINT('fk_credits_types')?: (int) $correspondingData["fk_credits_types_shows"], 'fk_credits_types').'</td>';
+			if(!$this->userIsStaff($user)) {
+				$this->resprints = '<td class="nowraponall">'.$this->renderCreditTypeSelect(GETPOSTINT('fk_credits_types')?: (int) $correspondingData["fk_credits_types_shows"], 'fk_credits_types').'</td>';
+			}
 			$this->resprints .= '<td class="nowraponall">'.$this->renderCreditStatusSelect($correspondingData["fk_credits_status_shows"], 'fk_credits_status').'</td>';
 			return 0;
 		}
@@ -113,19 +121,21 @@ class ActionsCreditmanager extends CommonHookActions
 
 	public function printFieldListOption($parameters, &$object, &$action)
 	{
-		global $langs;
+		global $langs, $user;
 		$langs->load('creditmanager@creditmanager');
 
 		if (!$this->isTaskTimeListContext($parameters)) {
 			return 0;
 		}
-		$this->resprints = '<td class="nowraponall">'.$this->renderCreditTypeSelect(GETPOSTINT('search_credits_types'), 'search_credits_types').'</td>';
+		if(!$this->userIsStaff($user)) {
+			$this->resprints = '<td class="nowraponall">'.$this->renderCreditTypeSelect(GETPOSTINT('search_credits_types'), 'search_credits_types').'</td>';
+		}
 		$this->resprints .= '<td class="nowraponall">'.$this->renderCreditStatusSelect(GETPOSTINT('search_credits_status'), 'search_credits_status').'</td>';
 	
 	}
 
 	public function printFieldListSelect($parameters, &$object, &$action, $hookmanager) {
-		global $conf;
+
 		if (!$this->isTaskTimeListContext($parameters)) {
 			return 0;
 		}
@@ -133,15 +143,16 @@ class ActionsCreditmanager extends CommonHookActions
 	}
 
 	public function printFieldListFrom($parameters, &$object, &$action, $hookmanager) {
-		global $db;
+
 		if (!$this->isTaskTimeListContext($parameters)) {
 			return 0;
 		}
 		$this->resprints = " LEFT JOIN ".MAIN_DB_PREFIX."credits_status_types_and_timesheets as cstt ON cstt.fk_element_time = t.rowid";
 	}
 
-	public function printFieldListWhere($parameters, &$object, &$action, $hookmanager) {
-    	//global $db;
+	public function printFieldListWhere($parameters, &$object, &$action, $hookmanager) 
+	{
+
 		if (!$this->isTaskTimeListContext($parameters)) {
 			return 0;
 		}
@@ -221,7 +232,7 @@ class ActionsCreditmanager extends CommonHookActions
 
 	private function renderCreditTypeSelect($selectedId, $htmlName)
 	{
-		global $langs;
+		global $langs, $user;
 		$langs->load('creditmanager@creditmanager');
 
 		$creditType = new CreditType($this->db);
@@ -241,11 +252,11 @@ class ActionsCreditmanager extends CommonHookActions
 
 	private function renderCreditStatusSelect($selectedId, $htmlName)
 	{
-		global $langs;
+		global $langs, $user;
 		$langs->load('creditmanager@creditmanager');
 
 		$credit = new CreditStatus($this->db);
-		$list = $credit->fetchAll();
+		$list = $credit->fetchAll($this->userIsStaff($user));
 		if (!is_array($list)) {
 			return '<span class="opacitymedium">'.$langs->trans('NoRecordFound').'</span>';
 		}
@@ -266,5 +277,20 @@ class ActionsCreditmanager extends CommonHookActions
 		$fk_credits_status_shows = $creditTM->fk_credits_status ? (int) $creditTM->fk_credits_status : null;
 		$fk_credits_types_shows = $creditTM->fk_credits_types ? (int) $creditTM->fk_credits_types : null;
 		return ["fk_credits_status_shows" => $fk_credits_status_shows, "fk_credits_types_shows" => $fk_credits_types_shows];
+	}
+
+	private function userIsStaff($user) 
+	{
+		// Get group ID of "Staff"
+		$sql = "SELECT rowid FROM ".MAIN_DB_PREFIX."usergroup WHERE nom = 'Credit Manager - Staff'";
+		$resql = $this->db->query($sql);
+		if (!$resql || $this->db->num_rows($resql) == 0) return false;
+		$obj = $this->db->fetch_object($resql);
+		$staffGroupId = $obj->rowid;
+
+		// Check if current user is in that group
+		$sql = "SELECT fk_user FROM ".MAIN_DB_PREFIX."usergroup_user WHERE fk_usergroup = ".(int)$staffGroupId." AND fk_user = ".(int)$user->id;
+		$resql = $this->db->query($sql);
+		return ($resql && $this->db->num_rows($resql) > 0);
 	}
 }
