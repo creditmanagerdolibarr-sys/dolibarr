@@ -116,9 +116,12 @@ class CreditStatus extends CommonObject
 	 *
 	 *	@return	array|int			Array of CreditStatus, or <0 if KO
 	 */
-	public function fetchAll()
+	public function fetchAll($userIsStaff = false)
 	{
 		$sql = "SELECT rowid FROM ".$this->db->prefix().$this->table_element;
+		if ($userIsStaff) {
+			$sql .= " WHERE status_name IN ('DRAFT','SUBMITTED')";
+		}
 		
 		$sql .= " ORDER BY rowid";
 
