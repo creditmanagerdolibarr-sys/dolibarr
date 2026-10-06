@@ -54,7 +54,7 @@ $token = newToken();
 
 $error = 0;
 
-if ($action === 'recalculate_balances' && $confirm === 'yes' && $user->admin) {
+if ($action === 'recalculate_balances' && $confirm === 'yes' && creditmanagerAllowMutatingAction() && $user->admin) {
 	$db->begin();
 
 	dol_syslog('CreditManager: Starting balance recalculation', LOG_INFO);
@@ -129,7 +129,7 @@ if ($action === 'recalculate_balances' && $confirm === 'yes' && $user->admin) {
 	}
 }
 
-if ($action === 'check_consistency' && $user->admin) {
+if ($action === 'check_consistency' && creditmanagerAllowMutatingAction() && $user->admin) {
 	dol_syslog('CreditManager: Starting consistency check', LOG_INFO);
 
 	$issues = array();

@@ -230,27 +230,22 @@ print '<div class="opacitymedium marginbottomonly">';
 print $langs->trans('CreditBalancesListHelp');
 print '</div>';
 
-print '<form method="GET" action="'.$_SERVER['PHP_SELF'].'" name="search_form_balance">';
-print '<input type="hidden" name="token" value="'.$token.'">';
-print '<input type="hidden" name="sortfield" value="'.dol_escape_htmltag($sortfield).'"/>';
-print '<input type="hidden" name="sortorder" value="'.dol_escape_htmltag($sortorder).'"/>';
+creditmanagerPrintDetachedSearchForm($sortfield, $sortorder, 'searchFormList');
 
-print_barre_liste($langs->trans('CreditBalances'), $page, $_SERVER['PHP_SELF'], $param, $sortfield, $sortorder, '', $totalRecords, '', '');
+$newcardbutton = '';
+if (creditmanagerCanExport($user)) {
+	$newcardbutton .= dolGetButtonTitle($langs->trans('ExportCSV'), '', 'fa fa-download', dol_buildpath('/custom/creditmanager/balance_list.php', 1).'?action=exportcsv&token='.$token.$param, '', 1);
+}
 
-print '<div class="div-table-responsive-no-min">';
-print '<table class="noborder centpercent">';
-print '<tr class="liste_titre liste_titre_filter">';
-print '<th>'.$langs->trans('ThirdParty').'</th>';
-print '<th>'.$langs->trans('CreditType').'</th>';
-print '<th class="right">'.$langs->trans('Balance').'</th>';
-print '<th>'.$langs->trans('DateModificationShort').'</th>';
-print '<th class="right">'.$langs->trans('CreditManagerActions').'</th>';
-print '</tr>';
-print '<tr class="oddeven">';
-print '<td>';
+print_barre_liste($langs->trans('CreditBalances'), $page, $_SERVER['PHP_SELF'], $param, $sortfield, $sortorder, '', $totalRecords, $totalRecords, '', 0, $newcardbutton);
+
+print '<div class="div-table-responsive">';
+print '<table class="tagtable nobottomiftotal liste">';
+print '<tr class="liste_titre_filter">';
+print '<td class="liste_titre">';
 creditmanagerPrintScopedCompanySelect($form, $db, $financialScope, $search_socid, 'search_socid', $entitySoc);
 print '</td>';
-print '<td>';
+print '<td class="liste_titre">';
 $sqlTypes = 'SELECT rowid, code, label FROM '.MAIN_DB_PREFIX.'credits_types';
 $sqlTypes .= ' WHERE entity IN ('.$entityType.') AND active = 1 ORDER BY code';
 $resTypes = $db->query($sqlTypes);
@@ -264,28 +259,12 @@ if ($resTypes) {
 	$db->free($resTypes);
 }
 print '</select></td>';
-print '<td class="right"><span class="opacitymedium">—</span></td>';
-print '<td><span class="opacitymedium">—</span></td>';
-print '<td class="right nowrap">';
-print '<input type="submit" class="button small" name="button_search" value="'.$langs->trans('Search').'"> ';
-print '<input type="submit" class="button small" name="button_removefilter" value="'.$langs->trans('Reset').'"> ';
-print '<a class="button small" href="' . dol_buildpath('/custom/creditmanager/balance_list.php', 1).'?action=exportcsv&token='.$token.$param.'">'.$langs->trans('ExportCSV').'</a>';
+print '<td class="liste_titre"><label><input type="checkbox" name="search_hide_zero" value="1"'.(!empty($search_hide_zero) ? ' checked' : '').'> '.$langs->trans('CreditBalancesHideZero').'</label></td>';
+print '<td class="liste_titre right"><span class="opacitymedium">'.$langs->trans('Total').':</span> <strong>'.creditmanagerFormatAmount($totalBalanceSum).'</strong></td>';
+print '<td class="liste_titre center maxwidthsearch">';
+creditmanagerPrintListFilterButtons('searchFormList');
 print '</td>';
 print '</tr>';
-print '<tr class="oddeven">';
-print '<td colspan="3">';
-print '<label><input type="checkbox" name="search_hide_zero" value="1"'.(!empty($search_hide_zero) ? ' checked' : '').'> ';
-print $langs->trans('CreditBalancesHideZero').'</label>';
-print '</td>';
-print '<td colspan="2" class="right">';
-print '<span class="opacitymedium">'.$langs->trans('Total').':</span> <strong>'.creditmanagerFormatAmount($totalBalanceSum).'</strong>';
-print '</td>';
-print '</tr>';
-print '</table>';
-print '</div>';
-
-print '<div class="div-table-responsive">';
-print '<table class="noborder centpercent">';
 print '<tr class="liste_titre">';
 print_liste_field_titre($langs->trans('ThirdParty'), $_SERVER['PHP_SELF'], 's.nom', '', $param, '', $sortfield, $sortorder);
 print_liste_field_titre($langs->trans('CreditType'), $_SERVER['PHP_SELF'], 't.code', '', $param, '', $sortfield, $sortorder);
@@ -327,7 +306,7 @@ if ($resql) {
 
 print '</table>';
 print '</div>';
-print '</form>';
+creditmanagerPrintBindFiltersToSearchForm('searchFormList');
 
 llxFooter();
 $db->close();

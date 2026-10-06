@@ -173,7 +173,7 @@ if ($action === 'export' && creditmanagerCanExport($user)) {
 	}
 }
 
-if ($action === 'generate_report' && creditmanagerCanExport($user)) {
+if ($action === 'generate_report' && !creditmanagerIsListFilterSubmit() && creditmanagerCanExport($user)) {
 	require_once DOL_DOCUMENT_ROOT.'/core/lib/pdf.lib.php';
 
 	$dir = DOL_DATA_ROOT.'/creditmanager/reports';

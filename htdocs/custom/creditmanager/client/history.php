@@ -313,6 +313,7 @@ if ($resCount) {
 
 $sqlList = "SELECT m.rowid, m.date_movement, m.amount, m.balance_after, m.type_movement, m.description,";
 $sqlList .= " m.fk_invoice, m.fk_element_time, m.fk_timesheet,";
+$sqlList .= " ".creditmanagerSqlCancelledAttributionFlag('m')." as is_cancelled,";
 $sqlList .= " t.code as type_code, t.label as type_label,";
 $sqlList .= " COALESCE(NULLIF(m.reference, ''), CONCAT('MVT-', m.rowid)) as credit_debit_reference, cs.status_name as credit_status, et.rowid as timesheet_id,";
 $sqlList .= " pr.rowid as project_id, pr.ref as project_ref, pr.title as project_title,";
@@ -543,60 +544,12 @@ print '<a class="butAction" href="'.dol_escape_htmltag($selfUrl.'?'.http_build_q
 print '<a class="butAction" href="'.dol_escape_htmltag($selfUrl.'?'.http_build_query($pdfQ)).'">'.$langs->trans('CreditClientExportPdf').'</a>';
 print '</div>';
 
-// Filters
-print '<form method="POST" action="'.dol_escape_htmltag($selfUrl).'" name="history_filters">';
-print '<input type="hidden" name="token" value="'.$token.'">';
+$historyExtras = array();
 if (empty($user->socid)) {
-	print '<input type="hidden" name="socid" value="'.((int) $socid).'">';
+	$historyExtras['socid'] = (int) $socid;
 }
-print '<div class="div-table-responsive-no-min"><table class="noborder centpercent">';
-print '<tr class="liste_titre"><th colspan="4">'.$langs->trans('CreditReportFilters').'</th></tr>';
+creditmanagerPrintDetachedSearchForm($sortfield, $sortorder, 'searchFormList', $historyExtras);
 
-print '<tr class="oddeven">';
-print '<td><label>'.$langs->trans('CreditClientPeriodPreset').'</label><br>';
-print $form->selectarray('period_preset', $presetOptions, $period_preset, 0, 0, 0, '', 0, 0, 0, '', 'minwidth150');
-print '</td>';
-print '<td><label>'.$langs->trans('DateStart').'</label><br>';
-print $form->selectDate($search_date_start ? $search_date_start : '', 'search_date_start_', 0, 0, 1, '', 1, 0);
-print '</td>';
-print '<td><label>'.$langs->trans('DateEnd').'</label><br>';
-print $form->selectDate($search_date_end ? $search_date_end : '', 'search_date_end_', 0, 0, 1, '', 1, 0);
-print '</td>';
-print '<td><label>'.$langs->trans('CreditType').'</label><br>';
-print $form->multiselectarray('search_typeids', $typeOptions, $search_typeids, 0, 0, 'minwidth200', 0, 0);
-print '</td>';
-print '</tr>';
-
-print '<tr class="oddeven">';
-print '<td><label>'.$langs->trans('CreditClientMovementType').'</label><br>';
-print $form->selectarray('search_movement_type', $movementTypeOptions, $search_movement_type, 0, 0, 0, '', 0, 0, 0, '', 'minwidth150');
-print '</td>';
-print '<td><label>'.$langs->trans('CreditClientAmountMin').'</label><br>';
-print '<input type="number" class="maxwidth100" name="search_amount_min" step="0.01" min="0" value="'.($search_amount_min !== null ? dol_escape_htmltag((string) $search_amount_min) : '').'">';
-print '</td>';
-print '<td><label>'.$langs->trans('CreditClientAmountMax').'</label><br>';
-print '<input type="number" class="maxwidth100" name="search_amount_max" step="0.01" min="0" value="'.($search_amount_max !== null ? dol_escape_htmltag((string) $search_amount_max) : '').'">';
-print '</td>';
-print '<td><label>'.$langs->trans('Project').'</label><br>';
-print $form->selectarray('search_projectid', $projectOptions, $search_projectid, 1, 0, 0, '', 0, 0, 0, '', 'minwidth200');
-print '</td>';
-print '</tr>';
-
-print '<tr class="oddeven">';
-print '<td><label>'.$langs->trans('CreditClientStatus').'</label><br>';
-print $form->selectarray('search_status', $statusOptions, $search_status, 0, 0, 0, '', 0, 0, 0, '', 'minwidth150');
-print '</td>';
-print '<td colspan="2"><label>'.$langs->trans('Search').'</label><br>';
-print '<input type="text" class="minwidth300" name="search_text" value="'.dol_escape_htmltag($search_text).'" placeholder="'.dol_escape_htmltag($langs->trans('CreditClientSearchPlaceholder')).'">';
-print '</td>';
-print '<td class="right valignmiddle">';
-print '<button type="submit" class="button" name="button_search" value="1">'.$langs->trans('Refresh').'</button> ';
-print '<button type="submit" class="button button-cancel" name="button_removefilter" value="1">'.$langs->trans('CreditReportResetFilters').'</button>';
-print '</td>';
-print '</tr>';
-print '</table></div>';
-
-// Charts
 print '<div class="fichecenter">';
 print '<div class="fichehalfleft"><div class="div-table-responsive-no-min">';
 print '<table class="noborder centpercent"><tr class="liste_titre"><th>'.$langs->trans('CreditClientHistoryEvolutionChart').'</th></tr>';
@@ -612,7 +565,35 @@ print '<tr class="oddeven"><td><canvas id="chartHistoryMonthly" height="140"></c
 
 print_barre_liste($langs->trans('CreditClientHistoryList'), $page, $selfUrl, $param, $sortfield, $sortorder, '', $totalRecords, $totalRecords, '', 0, '', '', $limit, 0, 0, 1);
 
-print '<div class="div-table-responsive"><table class="noborder centpercent">';
+print '<div class="div-table-responsive"><table class="tagtable nobottomiftotal liste">';
+print '<tr class="liste_titre_filter">';
+print '<td class="liste_titre nowrap">';
+print $form->selectarray('period_preset', $presetOptions, $period_preset, 0, 0, 0, '', 0, 0, 0, '', 'minwidth100');
+print '<br>';
+print $form->selectDate($search_date_start ? $search_date_start : '', 'search_date_start_', 0, 0, 1, '', 1, 0);
+print '<br>';
+print $form->selectDate($search_date_end ? $search_date_end : '', 'search_date_end_', 0, 0, 1, '', 1, 0);
+print '</td>';
+print '<td class="liste_titre">';
+print $form->multiselectarray('search_typeids', $typeOptions, $search_typeids, 0, 0, 'minwidth150', 0, 0);
+print '</td>';
+print '<td class="liste_titre">';
+print $form->selectarray('search_movement_type', $movementTypeOptions, $search_movement_type, 0, 0, 0, '', 0, 0, 0, '', 'minwidth100');
+print '</td>';
+print '<td class="liste_titre">';
+print '<input type="number" class="maxwidth75" name="search_amount_min" step="0.01" min="0" placeholder="min" value="'.($search_amount_min !== null ? dol_escape_htmltag((string) $search_amount_min) : '').'">';
+print '<input type="number" class="maxwidth75" name="search_amount_max" step="0.01" min="0" placeholder="max" value="'.($search_amount_max !== null ? dol_escape_htmltag((string) $search_amount_max) : '').'">';
+print '</td>';
+print '<td class="liste_titre"><input type="text" class="flat minwidth150" name="search_text" value="'.dol_escape_htmltag($search_text).'" placeholder="'.dol_escape_htmltag($langs->trans('CreditClientSearchPlaceholder')).'"></td>';
+print '<td class="liste_titre">';
+print $form->selectarray('search_projectid', $projectOptions, $search_projectid, 1, 0, 0, '', 0, 0, 0, '', 'minwidth150');
+print '<br>';
+print $form->selectarray('search_status', $statusOptions, $search_status, 0, 0, 0, '', 0, 0, 0, '', 'minwidth100');
+print '</td>';
+print '<td class="liste_titre center maxwidthsearch">';
+creditmanagerPrintListFilterButtons('searchFormList');
+print '</td>';
+print '</tr>';
 print '<tr class="liste_titre">';
 print_liste_field_titre($langs->trans('Date'), $selfUrl, 'm.date_movement', '', $param, '', $sortfield, $sortorder);
 print_liste_field_titre($langs->trans('CreditType'), $selfUrl, 't.code', '', $param, '', $sortfield, $sortorder);
@@ -642,7 +623,11 @@ foreach ($listRows as $obj) {
 	$timesheetId = !empty($obj->timesheet_id) ? (int) $obj->timesheet_id : (!empty($obj->fk_element_time) ? (int) $obj->fk_element_time : (int) $obj->fk_timesheet);
 	$invoiceId = !empty($obj->invoice_id) ? (int) $obj->invoice_id : (int) $obj->fk_invoice;
 
-	print '<tr class="oddeven">';
+	$trClass = 'oddeven';
+	if (!empty($obj->is_cancelled)) {
+		$trClass .= ' creditmanager-cancelled';
+	}
+	print '<tr class="'.$trClass.'">';
 	print '<td>'.($obj->date_movement ? dol_print_date($db->jdate($obj->date_movement), 'dayhour') : '').'</td>';
 	print '<td>'.dol_escape_htmltag($obj->type_code.(!empty($obj->type_label) ? ' - '.$obj->type_label : '')).'</td>';
 	print '<td>'.dol_escape_htmltag($obj->type_movement).'</td>';
@@ -668,12 +653,16 @@ foreach ($listRows as $obj) {
 		$prUrl = dol_buildpath('/projet/card.php', 1).'?id='.((int) $obj->project_id);
 		$actions[] = '<a href="'.dol_escape_htmltag($prUrl).'" title="'.dol_escape_htmltag($obj->project_ref).'">'.img_picto($langs->trans('Project'), 'project').'</a>';
 	}
-	print !empty($actions) ? implode(' ', $actions) : '<span class="opacitymedium">-</span>';
+	print !empty($actions) ? implode(' ', $actions).' ' : '';
+	creditmanagerPrintAttributionListActions($user, $obj->type_movement, (int) $obj->rowid, (int) (!empty($obj->is_cancelled)));
+	if (empty($actions) && (!creditmanagerCanManageAttributions($user) || $obj->type_movement !== 'ATTRIBUTION' || !empty($obj->is_cancelled))) {
+		print '<span class="opacitymedium">-</span>';
+	}
 	print '</td>';
 	print '</tr>';
 }
 print '</table></div>';
-print '</form>';
+creditmanagerPrintBindFiltersToSearchForm('searchFormList');
 
 $jsEvo = json_encode($evolutionChart);
 $jsPie = json_encode($creditDebitChart);

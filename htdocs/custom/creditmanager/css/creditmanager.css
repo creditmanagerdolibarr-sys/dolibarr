@@ -75,3 +75,24 @@
 .creditmanager-card-safe .creditmanager-card-status {
 	color: #28a745;
 }
+
+button.creditmanager-btn-plus {
+	background: transparent;
+	border: 0;
+	cursor: pointer;
+	padding: 2px 8px;
+	line-height: 1;
+	color: #1a237e;
+	font-size: 1.7em;
+}
+
+button.creditmanager-btn-plus:hover {
+	color: #3949ab;
+}
+
+tr.creditmanager-cancelled td,
+tr.creditmanager-cancelled td a,
+tr.creditmanager-cancelled td .amount,
+tr.creditmanager-cancelled td .amountnegative {
+	color: #c0392b !important;
+}

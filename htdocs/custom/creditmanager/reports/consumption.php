@@ -278,6 +278,11 @@ if ($searchText !== '') {
 	}
 }
 
+$cancelSql = preg_replace('/^\s*AND\s+/i', '', creditmanagerSqlExcludeCancelledAttributionMovements('m'));
+if ($cancelSql !== '') {
+	$where[] = $cancelSql;
+}
+
 $whereSql = ' WHERE '.implode(' AND ', $where);
 
 $detailSql = "SELECT m.rowid, m.date_movement, m.amount, m.description, m.type_movement,";

@@ -101,7 +101,7 @@ if (!in_array($refreshInterval, array(0, 60, 120, 300, 600), true)) {
 	$refreshInterval = 0;
 }
 
-if ($action === 'save_widgets' && GETPOST('token', 'alpha')) {
+if (creditmanagerAllowMutatingAction() && $action === 'save_widgets' && GETPOST('token', 'alpha')) {
 	$widgetPrefs = array(
 		'show_alerts' => GETPOSTINT('show_alerts') ? 1 : 0,
 		'show_projects' => GETPOSTINT('show_projects') ? 1 : 0,
@@ -757,6 +757,11 @@ if (creditmanagerCanExport($user)) {
 }
 print '</td></tr>';
 print '</table></div>';
+print '</form>';
+
+print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'" id="widgetPrefsForm">';
+print '<input type="hidden" name="token" value="'.dol_escape_htmltag($token).'">';
+print '<input type="hidden" name="action" value="save_widgets">';
 
 // Widget preferences
 print '<div class="div-table-responsive-no-min marginbottomonly" style="margin-top:10px;"><table class="noborder centpercent">';
@@ -780,9 +785,9 @@ foreach ($refreshOptions as $sec => $lbl) {
 	print '<option value="'.$sec.'"'.($refreshInterval === (int) $sec ? ' selected' : '').'>'.$lbl.'</option>';
 }
 print '</select> ';
-print '<button class="button small" type="submit" name="action" value="save_widgets">'.$langs->trans('CreditDashboardSaveWidgets').'</button>';
-print '<input type="hidden" name="token" value="'.dol_escape_htmltag($token).'">';
+print '<button class="button small" type="submit">'.$langs->trans('CreditDashboardSaveWidgets').'</button>';
 print '</td></tr></table></div>';
+print '</form>';
 
 // Quick actions
 if (!empty($widgetPrefs['show_quick_actions'])) {
@@ -952,8 +957,6 @@ if (!empty($widgetPrefs['show_consumption'])) {
 	print '<tr class="oddeven"><td colspan="4"><canvas id="chartPmConsumption" height="160"></canvas></td></tr>';
 	print '</table></div>';
 }
-
-print '</form>';
 
 $jsChart = json_encode($consumptionChartConfig);
 print '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>';

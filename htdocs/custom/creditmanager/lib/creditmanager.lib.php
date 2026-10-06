@@ -957,3 +957,188 @@ function creditmanagerReportsMenuEnabledExpr()
 {
 	return creditmanagerFinancialMenuEnabledExpr();
 }
+
+/**
+ * True when the request is a list search / reset, not a business action.
+ *
+ * @return bool
+ */
+function creditmanagerIsListFilterSubmit()
+{
+	return (GETPOST('button_search', 'alpha') !== '' && GETPOST('button_search', 'alpha') !== null)
+		|| GETPOST('button_search_x', 'alpha')
+		|| GETPOST('button_search.x', 'alpha')
+		|| (GETPOST('button_removefilter', 'alpha') !== '' && GETPOST('button_removefilter', 'alpha') !== null)
+		|| GETPOST('button_removefilter_x', 'alpha')
+		|| GETPOST('button_removefilter.x', 'alpha');
+}
+
+/**
+ * Mutating actions (approve, debit, save, delete, …) must be POST and not a filter submit.
+ *
+ * @return bool
+ */
+function creditmanagerAllowMutatingAction()
+{
+	if (creditmanagerIsListFilterSubmit()) {
+		return false;
+	}
+	return (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST');
+}
+
+/**
+ * Combo empty values are often -1; only strictly positive IDs are real filters.
+ *
+ * @param mixed $value
+ * @return int
+ */
+function creditmanagerNormalizeSearchId($value)
+{
+	$id = (int) $value;
+	return $id > 0 ? $id : 0;
+}
+
+/**
+ * Empty GET search form; filter inputs bind to it via form="id".
+ *
+ * @param string $sortfield
+ * @param string $sortorder
+ * @param string $formId
+ * @return void
+ */
+function creditmanagerPrintDetachedSearchForm($sortfield, $sortorder, $formId = 'searchFormList', $extraHiddens = array())
+{
+	print '<form method="GET" action="'.$_SERVER['PHP_SELF'].'" id="'.dol_escape_htmltag($formId).'" name="'.dol_escape_htmltag($formId).'">';
+	print '<input type="hidden" name="sortfield" value="'.dol_escape_htmltag($sortfield).'"/>';
+	print '<input type="hidden" name="sortorder" value="'.dol_escape_htmltag($sortorder).'"/>';
+	if (is_array($extraHiddens)) {
+		foreach ($extraHiddens as $name => $value) {
+			print '<input type="hidden" name="'.dol_escape_htmltag((string) $name).'" value="'.dol_escape_htmltag((string) $value).'"/>';
+		}
+	}
+	print '</form>';
+}
+
+/**
+ * Search / reset pictos bound to the detached search form.
+ *
+ * @param string $formId
+ * @return void
+ */
+function creditmanagerPrintListFilterButtons($formId = 'searchFormList')
+{
+	print '<div class="nowraponall">';
+	print '<button type="submit" form="'.dol_escape_htmltag($formId).'" class="liste_titre button_search reposition" name="button_search_x" value="x"><span class="fas fa-search"></span></button>';
+	print '<button type="submit" form="'.dol_escape_htmltag($formId).'" class="liste_titre button_removefilter reposition" name="button_removefilter_x" value="x"><span class="fas fa-times"></span></button>';
+	print '</div>';
+}
+
+/**
+ * Bind filter-row fields to the detached search form (Dolibarr widgets have no form= attribute).
+ *
+ * @param string $formId
+ * @return void
+ */
+function creditmanagerPrintBindFiltersToSearchForm($formId = 'searchFormList')
+{
+	print '<script>
+jQuery(function() {
+	jQuery("table.liste tr.liste_titre_filter input, table.liste tr.liste_titre_filter select, table.liste tr.liste_titre_filter textarea").attr("form", "'.dol_escape_js($formId).'");
+});
+</script>';
+}
+
+/**
+ * SQL fragment: exclude ATTRIBUTION rows that have been cancelled.
+ *
+ * @param string $alias Movement table alias
+ * @return string
+ */
+function creditmanagerSqlExcludeCancelledAttributions($alias = 'm')
+{
+	global $db;
+	$alias = preg_replace('/[^a-zA-Z0-9_]/', '', $alias);
+	if ($alias === '') {
+		$alias = 'm';
+	}
+	return " AND NOT EXISTS (SELECT 1 FROM ".$db->prefix()."credits_movements as cm_attr_cancel"
+		." WHERE cm_attr_cancel.fk_attribution = ".$alias.".rowid"
+		." AND cm_attr_cancel.type_movement = 'ATTRIBUTION_CANCEL'"
+		." AND cm_attr_cancel.entity = ".$alias.".entity)";
+}
+
+/**
+ * Exclude cancelled attributions and ATTRIBUTION_CANCEL rows from a movement query.
+ *
+ * @param string $alias Movement table alias
+ * @return string
+ */
+function creditmanagerSqlExcludeCancelledAttributionMovements($alias = 'm')
+{
+	$alias = preg_replace('/[^a-zA-Z0-9_]/', '', $alias);
+	if ($alias === '') {
+		$alias = 'm';
+	}
+	return " AND ".$alias.".type_movement <> 'ATTRIBUTION_CANCEL'"
+		.creditmanagerSqlExcludeCancelledAttributions($alias);
+}
+
+/**
+ * SQL expression: 1 if movement is ATTRIBUTION_CANCEL or a cancelled ATTRIBUTION.
+ *
+ * @param string $alias Movement table alias
+ * @return string
+ */
+function creditmanagerSqlCancelledAttributionFlag($alias = 'm')
+{
+	global $db;
+	$alias = preg_replace('/[^a-zA-Z0-9_]/', '', $alias);
+	if ($alias === '') {
+		$alias = 'm';
+	}
+	return "(CASE WHEN ".$alias.".type_movement = 'ATTRIBUTION_CANCEL' THEN 1"
+		." WHEN ".$alias.".type_movement = 'ATTRIBUTION' AND EXISTS ("
+		." SELECT 1 FROM ".$db->prefix()."credits_movements as cm_attr_cancel"
+		." WHERE cm_attr_cancel.fk_attribution = ".$alias.".rowid"
+		." AND cm_attr_cancel.type_movement = 'ATTRIBUTION_CANCEL'"
+		." AND cm_attr_cancel.entity = ".$alias.".entity"
+		.") THEN 1 ELSE 0 END)";
+}
+
+/**
+ * Plus-icon submit button (replaces a text ADD button).
+ *
+ * @param string $title
+ * @return void
+ */
+function creditmanagerPrintPlusSubmitButton($title = '')
+{
+	global $langs;
+	if ($title === '') {
+		$title = $langs->trans('Add');
+	}
+	print '<button type="submit" class="creditmanager-btn-plus" title="'.dol_escape_htmltag($title).'">';
+	print '<span class="fa fa-plus-circle valignmiddle"></span>';
+	print '</button>';
+}
+
+/**
+ * Edit / delete pictos for an ATTRIBUTION row when the user has rights.
+ *
+ * @param User   $user
+ * @param string $typeMovement
+ * @param int    $movementId
+ * @param int    $isCancelled
+ * @param string $extraParam Query string starting with &
+ * @return void
+ */
+function creditmanagerPrintAttributionListActions($user, $typeMovement, $movementId, $isCancelled = 0, $extraParam = '')
+{
+	if (!creditmanagerCanManageAttributions($user) || $typeMovement !== 'ATTRIBUTION' || !empty($isCancelled)) {
+		return;
+	}
+	$url = dol_buildpath('/custom/creditmanager/admin/attribution.php', 1);
+	$token = newToken();
+	print '<a class="editfielda reposition paddingright" href="'.$url.'?action=edit&amp;attrid='.((int) $movementId).'&amp;token='.$token.$extraParam.'">'.img_edit().'</a>';
+	print '<a class="reposition paddingleft" href="'.$url.'?action=delete&amp;attrid='.((int) $movementId).'&amp;token='.$token.$extraParam.'">'.img_delete().'</a>';
+}

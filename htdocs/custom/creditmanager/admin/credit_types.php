@@ -121,7 +121,7 @@ if (GETPOST('button_removefilter_x', 'alpha') || GETPOST('button_removefilter.x'
 	$param = '';
 }
 
-if ($action == 'add' && creditmanagerCanManageCreditTypes($user)) {
+if ($action == 'add' && creditmanagerAllowMutatingAction() && creditmanagerCanManageCreditTypes($user)) {
 	$error = 0;
 
 	$object->code = strtoupper(trim(GETPOST('code', 'aZ09')));
@@ -169,7 +169,7 @@ if ($action == 'add' && creditmanagerCanManageCreditTypes($user)) {
 	}
 }
 
-if ($action == 'update' && $id > 0 && creditmanagerCanManageCreditTypes($user)) {
+if ($action == 'update' && $id > 0 && creditmanagerAllowMutatingAction() && creditmanagerCanManageCreditTypes($user)) {
 	$error = 0;
 
 	$result = $object->fetch($id);
@@ -217,7 +217,7 @@ if ($action == 'update' && $id > 0 && creditmanagerCanManageCreditTypes($user)) 
 	}
 }
 
-if ($action == 'confirm_delete' && $confirm == 'yes' && $id > 0 && creditmanagerCanManageCreditTypes($user)) {
+if ($action == 'confirm_delete' && $confirm == 'yes' && $id > 0 && creditmanagerAllowMutatingAction() && creditmanagerCanManageCreditTypes($user)) {
 	$result = $object->fetch($id);
 	if ($result > 0) {
 		// CreditType::delete() handles soft-delete internally (sets active=0 if used)
@@ -238,7 +238,7 @@ if ($action == 'confirm_delete' && $confirm == 'yes' && $id > 0 && creditmanager
 	exit;
 }
 
-if ($action == 'activate' && $id > 0 && creditmanagerCanManageCreditTypes($user)) {
+if ($action == 'activate' && $id > 0 && !creditmanagerIsListFilterSubmit() && creditmanagerCanManageCreditTypes($user)) {
 	$result = $object->fetch($id);
 	if ($result > 0) {
 		$object->active = 1;
@@ -249,7 +249,7 @@ if ($action == 'activate' && $id > 0 && creditmanagerCanManageCreditTypes($user)
 	exit;
 }
 
-if ($action == 'disable' && $id > 0 && creditmanagerCanManageCreditTypes($user)) {
+if ($action == 'disable' && $id > 0 && !creditmanagerIsListFilterSubmit() && creditmanagerCanManageCreditTypes($user)) {
 	$result = $object->fetch($id);
 	if ($result > 0) {
 		$object->active = 0;
