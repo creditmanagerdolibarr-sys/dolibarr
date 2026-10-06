@@ -229,7 +229,7 @@ if (getDolGlobalString('MAIN_HTML_TITLE') && preg_match('/thirdpartynameonly/', 
 	$title = $object->name . ' - ' . $langs->trans("Credits");
 }
 $help_url = 'EN:Module_Third_Parties|FR:Module_Tiers';
-llxHeader('', $title, $help_url, '', 0, 0, '', '', '', 'mod-creditmanager page-tabs_thirdpartycredits');
+llxHeader('', $title, $help_url, '', 0, 0, '', array('/custom/creditmanager/css/creditmanager.css'), '', 'mod-creditmanager page-tabs_thirdpartycredits');
 
 $param = "&socid=" . $socid;
 if ($limit > 0 && $limit != $conf->liste_limit) {
@@ -353,6 +353,7 @@ if ($socid > 0) {
 
 	// Section 2: Movement history with filters
 	$sql = 'SELECT m.rowid, m.date_movement, m.amount, m.balance_after, m.type_movement, m.description,';
+	$sql .= ' '.creditmanagerSqlCancelledAttributionFlag('m').' as is_cancelled,';
 	$sql .= ' t.code as type_code, t.label as type_label,';
 	$sql .= ' u.login';
 	$sql .= ' FROM ' . MAIN_DB_PREFIX . 'credits_movements as m';
@@ -390,30 +391,25 @@ if ($socid > 0) {
 
 	$resql = $db->query($sql);
 
-	print '<form method="post" action="' . $_SERVER["PHP_SELF"] . '?socid=' . $socid . '" name="search_form">';
-	print '<input type="hidden" name="token" value="' . $token . '">';
-	if (!empty($sortfield)) {
-		print '<input type="hidden" name="sortfield" value="' . dol_escape_htmltag($sortfield) . '"/>';
+	creditmanagerPrintDetachedSearchForm($sortfield, $sortorder, 'searchFormList', array('socid' => (int) $socid));
+
+	$newcardbutton = '';
+	if (creditmanagerCanExport($user)) {
+		$newcardbutton .= dolGetButtonTitle($langs->trans("ExportCSV"), '', 'fa fa-download', $_SERVER["PHP_SELF"] . '?socid=' . $socid . '&action=exportcsv&token=' . $token . $param, '', 1);
+		$newcardbutton .= dolGetButtonTitle($langs->trans("Export") . ' PDF', '', 'fa fa-file-pdf', $_SERVER["PHP_SELF"] . '?socid=' . $socid . '&action=exportpdf&token=' . $token . $param, '', 1);
 	}
-	if (!empty($sortorder)) {
-		print '<input type="hidden" name="sortorder" value="' . dol_escape_htmltag($sortorder) . '"/>';
-	}
 
-	print_barre_liste($langs->trans("CreditMovements"), $page, $_SERVER["PHP_SELF"], $param, $sortfield, $sortorder, '', $totalRecords, '', '');
+	print_barre_liste($langs->trans("CreditMovements"), $page, $_SERVER["PHP_SELF"], $param, $sortfield, $sortorder, '', $totalRecords, $totalRecords, '', 0, $newcardbutton);
 
-	// Filters row
-	print '<div class="div-table-responsive-no-min">';
-	print '<table class="noborder centpercent">';
-	print '<tr class="liste_titre liste_titre_filter">';
-	print '<th>' . $langs->trans('CreditType') . '</th>';
-	print '<th>' . $langs->trans('DateRange') . '</th>';
-	print '<th>' . $langs->trans('MovementType') . '</th>';
-	print '<th class="right">' . $langs->trans('Action') . '</th>';
-	print '</tr>';
-	print '<tr class="oddeven">';
-
-	// Filter credit type
-	print '<td>';
+	print '<div class="div-table-responsive">';
+	print '<table class="tagtable nobottomiftotal liste">';
+	print '<tr class="liste_titre_filter">';
+	print '<td class="liste_titre nowrap">';
+	print $form->selectDate($search_date_start ?: -1, 'search_date_start_', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('From'));
+	print ' ';
+	print $form->selectDate($search_date_end ?: -1, 'search_date_end_', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('To'));
+	print '</td>';
+	print '<td class="liste_titre">';
 	$sqlTypes = 'SELECT rowid, code, label FROM ' . MAIN_DB_PREFIX . 'credits_types';
 	$sqlTypes .= ' WHERE entity = ' . ((int) $conf->entity) . ' AND active = 1 ORDER BY code';
 	$resTypes = $db->query($sqlTypes);
@@ -427,37 +423,21 @@ if ($socid > 0) {
 		$db->free($resTypes);
 	}
 	print '</select></td>';
-
-	// Filter date range
-	print '<td>';
-	print $form->selectDate($search_date_start ?: -1, 'search_date_start_', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('From'));
-	print ' ';
-	print $form->selectDate($search_date_end ?: -1, 'search_date_end_', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('To'));
-	print '</td>';
-
-	// Filter movement type
-	print '<td>';
+	print '<td class="liste_titre"></td>';
+	print '<td class="liste_titre"></td>';
+	print '<td class="liste_titre">';
 	print '<select name="search_movement_type" class="flat maxwidth100">';
 	print '<option value=""' . ($search_movement_type === '' ? ' selected' : '') . '></option>';
 	print '<option value="credit"' . ($search_movement_type === 'credit' ? ' selected' : '') . '>' . $langs->trans("Credit") . '</option>';
 	print '<option value="debit"' . ($search_movement_type === 'debit' ? ' selected' : '') . '>' . $langs->trans("Debit") . '</option>';
 	print '</select></td>';
-
-	// Action buttons
-	print '<td class="right">';
-	print '<input type="submit" class="button small" name="button_search" value="' . $langs->trans("Search") . '"> ';
-	print '<input type="submit" class="button small" name="button_removefilter" value="' . $langs->trans("Reset") . '"> ';
-	print '<a class="button small" href="' . $_SERVER["PHP_SELF"] . '?socid=' . $socid . '&action=exportcsv&token=' . $token . $param . '">' . $langs->trans("ExportCSV") . '</a> ';
-	print '<a class="button small" href="' . $_SERVER["PHP_SELF"] . '?socid=' . $socid . '&action=exportpdf&token=' . $token . $param . '">' . $langs->trans("Export") . ' PDF</a>';
+	print '<td class="liste_titre"></td>';
+	print '<td class="liste_titre"></td>';
+	print '<td class="liste_titre center maxwidthsearch">';
+	creditmanagerPrintListFilterButtons('searchFormList');
 	print '</td>';
-
 	print '</tr>';
-	print '</table>';
-	print '</div>';
 
-	// Table headers
-	print '<div class="div-table-responsive">';
-	print '<table class="noborder centpercent">';
 	print '<tr class="liste_titre">';
 	print_liste_field_titre($langs->trans("Date"), $_SERVER["PHP_SELF"], "m.date_movement", "", $param, '', $sortfield, $sortorder);
 	print_liste_field_titre($langs->trans("CreditType"), $_SERVER["PHP_SELF"], "t.code", "", $param, '', $sortfield, $sortorder);
@@ -466,6 +446,7 @@ if ($socid > 0) {
 	print_liste_field_titre($langs->trans("Type"), $_SERVER["PHP_SELF"], "m.type_movement", "", $param, '', $sortfield, $sortorder);
 	print '<th>' . $langs->trans("Description") . '</th>';
 	print '<th>' . $langs->trans("User") . '</th>';
+	print '<th class="center">' . $langs->trans("Action") . '</th>';
 	print '</tr>';
 
 	if ($resql) {
@@ -477,7 +458,11 @@ if ($socid > 0) {
 			if (!$obj) {
 				break;
 			}
-			print '<tr class="oddeven">';
+			$trClass = 'oddeven';
+			if (!empty($obj->is_cancelled)) {
+				$trClass .= ' creditmanager-cancelled';
+			}
+			print '<tr class="' . $trClass . '">';
 			print '<td>' . dol_print_date($db->jdate($obj->date_movement), 'dayhour') . '</td>';
 			print '<td>' . dol_escape_htmltag($obj->type_code . ' - ' . $obj->type_label) . '</td>';
 			$amountClass = $obj->amount >= 0 ? 'amount' : 'amountnegative';
@@ -486,6 +471,9 @@ if ($socid > 0) {
 			print '<td>' . dol_escape_htmltag($obj->type_movement) . '</td>';
 			print '<td>' . dol_escape_htmltag($obj->description) . '</td>';
 			print '<td>' . dol_escape_htmltag($obj->login) . '</td>';
+			print '<td class="center nowrap">';
+			creditmanagerPrintAttributionListActions($user, $obj->type_movement, (int) $obj->rowid, (int) $obj->is_cancelled);
+			print '</td>';
 			print '</tr>';
 			$i++;
 		}
@@ -495,7 +483,7 @@ if ($socid > 0) {
 
 	print '</table>';
 	print '</div>';
-	print '</form>';
+	creditmanagerPrintBindFiltersToSearchForm('searchFormList');
 
 	$db->free($resql);
 

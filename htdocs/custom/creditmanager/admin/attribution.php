@@ -70,8 +70,16 @@ $projectid        = GETPOST('projectid', 'int');
 $search_socid       = GETPOST('search_socid', 'int');
 $search_credit_type = GETPOST('search_credit_type', 'int');
 $search_user        = GETPOST('search_user', 'int');
-$search_date_start  = dol_mktime(0, 0, 0, GETPOSTINT('search_month_start'), GETPOSTINT('search_day_start'), GETPOSTINT('search_year_start'));
-$search_date_end    = dol_mktime(23, 59, 59, GETPOSTINT('search_month_end'), GETPOSTINT('search_day_end'), GETPOSTINT('search_year_end'));
+$search_date_start  = dol_mktime(0, 0, 0, GETPOSTINT('search_date_start_month'), GETPOSTINT('search_date_start_day'), GETPOSTINT('search_date_start_year'));
+$search_date_end    = dol_mktime(23, 59, 59, GETPOSTINT('search_date_end_month'), GETPOSTINT('search_date_end_day'), GETPOSTINT('search_date_end_year'));
+
+if (GETPOST('button_removefilter_x', 'alpha') || GETPOST('button_removefilter.x', 'alpha') || GETPOST('button_removefilter', 'alpha')) {
+	$search_socid = 0;
+	$search_credit_type = 0;
+	$search_user = 0;
+	$search_date_start = '';
+	$search_date_end = '';
+}
 
 $sortfield = GETPOST('sortfield', 'alpha');
 $sortorder = GETPOST('sortorder', 'alpha');
@@ -102,9 +110,10 @@ define('CREDITMVT_TYPE_ATTRIBUTION_CANCEL', 'ATTRIBUTION_CANCEL');
  */
 
 $error = 0;
+$keepCreateValues = false;
 
 // Add single attribution
-if ($action === 'add' && creditmanagerCanManageAttributions($user)) {
+if ($action === 'add' && creditmanagerAllowMutatingAction() && creditmanagerCanManageAttributions($user)) {
     if (!GETPOST('cancel', 'alpha')) {
         $allowNegative = getDolGlobalInt('CREDITMANAGER_ALLOW_NEGATIVE_ATTRIBUTION', 0);
         $maxAmount = (float) getDolGlobalString('CREDITMANAGER_MAX_ATTRIBUTION_AMOUNT', '0');
@@ -123,24 +132,34 @@ if ($action === 'add' && creditmanagerCanManageAttributions($user)) {
             $movId = $movement->createAttribution($socid, $credit_type_id, $amount, $description, $user);
             if ($movId < 0) {
                 setEventMessages($movement->error ? $movement->error : $langs->trans('Error'), null, 'errors');
+                $error++;
             } else {
                 setEventMessages($langs->trans('RecordSaved'), null, 'mesgs');
             }
         }
     }
+}
+
+$keepCreateValues = ($action === 'add' && !empty($error));
+if ($action === 'add') {
     $action = ''; // back to list
 }
 
+if (GETPOST('save', 'alpha') && creditmanagerAllowMutatingAction()) {
+    $action = 'update';
+}
+
 // Edit attribution (amount/description only)
-if ($action === 'update' && creditmanagerCanManageAttributions($user) && $attrid > 0) {
+if ($action === 'update' && creditmanagerAllowMutatingAction() && creditmanagerCanManageAttributions($user) && $attrid > 0) {
     if (!GETPOST('cancel', 'alpha')) {
         $db->begin();
 
         // Fetch original attribution movement
-        $sql = 'SELECT rowid, fk_soc, fk_credit_type, amount, description';
-        $sql .= ' FROM ' . $db->prefix() . 'credits_movements';
-        $sql .= " WHERE rowid = " . (int) $attrid;
-        $sql .= " AND type_movement = '" . $db->escape(CREDITMVT_TYPE_ATTRIBUTION) . "'";
+        $sql = 'SELECT m.rowid, m.fk_soc, m.fk_credit_type, m.amount, m.description';
+        $sql .= ' FROM ' . $db->prefix() . 'credits_movements as m';
+        $sql .= " WHERE m.rowid = " . (int) $attrid;
+        $sql .= " AND m.type_movement = '" . $db->escape(CREDITMVT_TYPE_ATTRIBUTION) . "'";
+        $sql .= creditmanagerSqlExcludeCancelledAttributions('m');
 
         $res = $db->query($sql);
         if (!$res) {
@@ -159,8 +178,9 @@ if ($action === 'update' && creditmanagerCanManageAttributions($user) && $attrid
                 $socidAttr = (int) $obj->fk_soc;
                 $typeAttr = (int) $obj->fk_credit_type;
 
-                $newAmount = (float) $amount;
-                $newDesc = $description !== '' ? $description : $oldDesc;
+                $newAmount = (float) price2num(GETPOST('edit_amount', 'alphanohtml'), 'MT');
+                $editDesc = GETPOST('edit_description', 'restricthtml');
+                $newDesc = $editDesc !== '' ? $editDesc : $oldDesc;
 
                 // Diff for balance and adjustment
                 $diff = $newAmount - $oldAmount;
@@ -215,13 +235,14 @@ if ($action === 'update' && creditmanagerCanManageAttributions($user) && $attrid
 }
 
 // Cancel attribution (business delete)
-if ($action === 'confirm_delete' && $confirm === 'yes' && creditmanagerCanManageAttributions($user) && $attrid > 0) {
+if ($action === 'confirm_delete' && $confirm === 'yes' && creditmanagerAllowMutatingAction() && creditmanagerCanManageAttributions($user) && $attrid > 0) {
     $db->begin();
 
-    $sql = 'SELECT rowid, fk_soc, fk_credit_type, amount';
-    $sql .= ' FROM ' . $db->prefix() . 'credits_movements';
-    $sql .= " WHERE rowid = " . (int) $attrid;
-    $sql .= " AND type_movement = '" . $db->escape(CREDITMVT_TYPE_ATTRIBUTION) . "'";
+    $sql = 'SELECT m.rowid, m.fk_soc, m.fk_credit_type, m.amount';
+    $sql .= ' FROM ' . $db->prefix() . 'credits_movements as m';
+    $sql .= " WHERE m.rowid = " . (int) $attrid;
+    $sql .= " AND m.type_movement = '" . $db->escape(CREDITMVT_TYPE_ATTRIBUTION) . "'";
+    $sql .= creditmanagerSqlExcludeCancelledAttributions('m');
 
     $res = $db->query($sql);
     if (!$res) {
@@ -275,7 +296,7 @@ if ($action === 'confirm_delete' && $confirm === 'yes' && creditmanagerCanManage
 }
 
 // Batch attribution (same type + amount for multiple clients)
-if ($action === 'addbatch' && creditmanagerCanManageAttributions($user)) {
+if ($action === 'addbatch' && creditmanagerAllowMutatingAction() && creditmanagerCanManageAttributions($user)) {
     $toselect = GETPOST('toselect', 'array:int'); // array of socid
     if (!is_array($toselect)) {
         $toselect = array();
@@ -313,7 +334,7 @@ if ($action === 'addbatch' && creditmanagerCanManageAttributions($user)) {
 }
 
 // Import CSV (simple implementation: socid;credit_type_code;amount;description)
-if ($action === 'importcsv' && creditmanagerCanManageAttributions($user)) {
+if ($action === 'importcsv' && creditmanagerAllowMutatingAction() && creditmanagerCanManageAttributions($user)) {
     if (!empty($_FILES['importfile']['tmp_name'])) {
         $importFile = $_FILES['importfile']['tmp_name'];
         $handle = fopen($importFile, 'r');
@@ -396,6 +417,7 @@ if ($action === 'exportcsv' && creditmanagerCanExport($user)) {
     $sql .= ' LEFT JOIN ' . $db->prefix() . 'user as u ON u.rowid = m.fk_user_creat';
     $sql .= " WHERE m.type_movement = '" . $db->escape(CREDITMVT_TYPE_ATTRIBUTION) . "'";
     $sql .= ' AND m.entity = ' . ((int) $conf->entity);
+    $sql .= creditmanagerSqlExcludeCancelledAttributions('m');
 
     if ($search_socid > 0) {
         $sql .= ' AND m.fk_soc = ' . ((int) $search_socid);
@@ -449,7 +471,8 @@ if ($action === 'exportcsv' && creditmanagerCanExport($user)) {
 $form = new Form($db);
 $formcompany = new Form($db); // reuse
 
-llxHeader('', $langs->trans('CreditManagerAttribution'), '', '', 0, 0, '', '', '', 'mod-creditmanager page-creditmanager-attribution');
+$morecss = array('/custom/creditmanager/css/creditmanager.css');
+llxHeader('', $langs->trans('CreditManagerAttribution'), '', '', 0, 0, '', $morecss, '', 'mod-creditmanager page-creditmanager-attribution');
 
 $linkback = '<a href="' . DOL_URL_ROOT . '/admin/modules.php">' . $langs->trans('BackToModuleList') . '</a>';
 print load_fiche_titre($langs->trans('CreditManagerAttribution'), $linkback, 'title_setup');
@@ -479,7 +502,7 @@ print '</tr>';
 print '<tr class="oddeven">';
 // Customer
 print '<td>';
-print $form->select_company($socid, 'socid', '', 1, 0, 0, array(), 0, 'minwidth300');
+print $form->select_company($keepCreateValues ? $socid : 0, 'socid', '', 1, 0, 0, array(), 0, 'minwidth300');
 print '</td>';
 
 // Credit type
@@ -492,7 +515,7 @@ print '<select name="credit_type_id" class="flat minwidth200">';
 print '<option value="0">&nbsp;</option>';
 if ($resTypes) {
     while ($objT = $db->fetch_object($resTypes)) {
-        $selected = ($credit_type_id > 0 && (int) $objT->rowid === $credit_type_id) ? ' selected' : '';
+        $selected = ($keepCreateValues && $credit_type_id > 0 && (int) $objT->rowid === $credit_type_id) ? ' selected' : '';
         print '<option value="' . (int) $objT->rowid . '"' . $selected . '>' . dol_escape_htmltag($objT->code . ' - ' . $objT->label) . '</option>';
     }
     $db->free($resTypes);
@@ -502,17 +525,17 @@ print '</td>';
 
 // Amount
 print '<td>';
-print '<input type="text" name="amount" class="flat maxwidth75" value="' . dol_escape_htmltag(GETPOST('amount', 'alphanohtml')) . '">';
+print '<input type="text" name="amount" class="flat maxwidth75" value="' . ($keepCreateValues ? dol_escape_htmltag(GETPOST('amount', 'alphanohtml')) : '') . '">';
 print '</td>';
 
 // Description
 print '<td>';
-print '<input type="text" name="description" class="flat minwidth200" value="' . dol_escape_htmltag(GETPOST('description', 'restricthtml')) . '">';
+print '<input type="text" name="description" class="flat minwidth200" value="' . ($keepCreateValues ? dol_escape_htmltag(GETPOST('description', 'restricthtml')) : '') . '">';
 print '</td>';
 
 // Submit
 print '<td class="center">';
-print '<input type="submit" class="button" value="' . $langs->trans('Add') . '">';
+creditmanagerPrintPlusSubmitButton($langs->trans('Add'));
 print '</td>';
 
 print '</tr>';
@@ -578,7 +601,7 @@ print '<input type="text" name="description" class="flat minwidth200">';
 print '</td>';
 
 print '<td class="center">';
-print '<input type="submit" class="button" value="' . $langs->trans('Add') . '">';
+creditmanagerPrintPlusSubmitButton($langs->trans('Add'));
 print '</td>';
 
 print '</tr>';
@@ -659,122 +682,140 @@ print '</form>';
 
 print '<br>';
 
-// Filters + export button
-print load_fiche_titre($langs->trans('CreditManagerAttributionHistory'), '', '');
-
-print '<form method="GET" action="' . $_SERVER['PHP_SELF'] . '">';
-print '<input type="hidden" name="token" value="' . $token . '">';
-
-print '<table class="noborder centpercent">';
-print '<tr class="liste_titre">';
-print '<td>' . $langs->trans('Customer') . '</td>';
-print '<td>' . $langs->trans('CreditType') . '</td>';
-print '<td>' . $langs->trans('User') . '</td>';
-print '<td>' . $langs->trans('From') . '</td>';
-print '<td>' . $langs->trans('To') . '</td>';
-print '<td class="right">' . $langs->trans('Action') . '</td>';
-print '</tr>';
-
-print '<tr class="oddeven">';
-
-// Filter customer
-print '<td>';
-print $form->select_company($search_socid, 'search_socid', '', 1, 0, 0, array(), 0, 'maxwidth200');
-print '</td>';
-
-// Filter credit type
-print '<td>';
-$resTypesF = $db->query($sqlTypes);
-print '<select name="search_credit_type" class="flat maxwidth200">';
-print '<option value="0">&nbsp;</option>';
-if ($resTypesF) {
-    while ($objT = $db->fetch_object($resTypesF)) {
-        $sel = ($search_credit_type > 0 && (int) $objT->rowid === $search_credit_type) ? ' selected' : '';
-        print '<option value="' . (int) $objT->rowid . '"' . $sel . '>' . dol_escape_htmltag($objT->code . ' - ' . $objT->label) . '</option>';
-    }
-    $db->free($resTypesF);
+// List of attributions with attached filters
+$sqlwhere = " WHERE m.type_movement = '" . $db->escape(CREDITMVT_TYPE_ATTRIBUTION) . "'";
+$sqlwhere .= ' AND m.entity = ' . ((int) $conf->entity);
+$sqlwhere .= creditmanagerSqlExcludeCancelledAttributions('m');
+if ($search_socid > 0) {
+    $sqlwhere .= ' AND m.fk_soc = ' . ((int) $search_socid);
 }
-print '</select>';
-print '</td>';
+if ($search_credit_type > 0) {
+    $sqlwhere .= ' AND m.fk_credit_type = ' . ((int) $search_credit_type);
+}
+if ($search_user > 0) {
+    $sqlwhere .= ' AND m.fk_user_creat = ' . ((int) $search_user);
+}
+if (!empty($search_date_start)) {
+    $sqlwhere .= " AND m.date_movement >= '" . $db->idate($search_date_start) . "'";
+}
+if (!empty($search_date_end)) {
+    $sqlwhere .= " AND m.date_movement <= '" . $db->idate($search_date_end) . "'";
+}
 
-// Filter user
-print '<td>';
-print $form->select_dolusers($search_user, 'search_user', 1, null, 0, '', '', 0, 0, 0, '', 0, '', 'maxwidth200');
-print '</td>';
+$sqlFrom = ' FROM ' . $db->prefix() . 'credits_movements as m';
+$sqlFrom .= ' INNER JOIN ' . $db->prefix() . 'societe as s ON s.rowid = m.fk_soc';
+$sqlFrom .= ' INNER JOIN ' . $db->prefix() . 'credits_types as t ON t.rowid = m.fk_credit_type';
+$sqlFrom .= ' LEFT JOIN ' . $db->prefix() . 'user as u ON u.rowid = m.fk_user_creat';
 
-// Date from / to
-print '<td>';
-print $form->selectdate($search_date_start, 'search_', 0, 0, 1, '', 1, 0, 0, '', '', '', '');
-print '</td>';
+$sqlCount = 'SELECT COUNT(m.rowid) as nb' . $sqlFrom . $sqlwhere;
+$nbtotalofrecords = 0;
+$resCount = $db->query($sqlCount);
+if ($resCount) {
+    $objCount = $db->fetch_object($resCount);
+    $nbtotalofrecords = (int) ($objCount->nb ?? 0);
+    $db->free($resCount);
+}
 
-print '<td>';
-print $form->selectdate($search_date_end, 'search_end_', 0, 0, 1, '', 1, 0, 0, '', '', '', '');
-print '</td>';
-
-// Buttons
-print '<td class="right">';
-print '<input type="submit" class="button small" value="' . $langs->trans('Search') . '"> ';
-print '<a class="button small" href="' . $_SERVER['PHP_SELF'] . '?token=' . $token . '">' . $langs->trans('Reset') . '</a> ';
-print '<a class="button small" href="' . $_SERVER['PHP_SELF'] . '?action=exportcsv&amp;token=' . $token . '">' . $langs->trans('Export') . '</a>';
-print '</td>';
-
-print '</tr>';
-print '</table>';
-print '</form>';
-
-print '<br>';
-
-// List of attributions
 $sql = 'SELECT m.rowid, m.date_movement, m.amount, m.description,';
 $sql .= ' s.rowid as socid, s.nom as client_name,';
 $sql .= ' t.code as type_code, t.label as type_label,';
 $sql .= ' u.login';
-$sql .= ' FROM ' . $db->prefix() . 'credits_movements as m';
-$sql .= ' INNER JOIN ' . $db->prefix() . 'societe as s ON s.rowid = m.fk_soc';
-$sql .= ' INNER JOIN ' . $db->prefix() . 'credits_types as t ON t.rowid = m.fk_credit_type';
-$sql .= ' LEFT JOIN ' . $db->prefix() . 'user as u ON u.rowid = m.fk_user_creat';
-$sql .= " WHERE m.type_movement = '" . $db->escape(CREDITMVT_TYPE_ATTRIBUTION) . "'";
-$sql .= ' AND m.entity = ' . ((int) $conf->entity);
-
-if ($search_socid > 0) {
-    $sql .= ' AND m.fk_soc = ' . ((int) $search_socid);
-}
-if ($search_credit_type > 0) {
-    $sql .= ' AND m.fk_credit_type = ' . ((int) $search_credit_type);
-}
-if ($search_user > 0) {
-    $sql .= ' AND m.fk_user_creat = ' . ((int) $search_user);
-}
-if (!empty($search_date_start)) {
-    $sql .= " AND m.date_movement >= '" . $db->idate($search_date_start) . "'";
-}
-if (!empty($search_date_end)) {
-    $sql .= " AND m.date_movement <= '" . $db->idate($search_date_end) . "'";
-}
-
+$sql .= $sqlFrom . $sqlwhere;
 $sql .= ' ORDER BY ' . $db->escape($sortfield) . ' ' . $db->escape($sortorder);
 $sql .= $db->plimit($limit + 1, $offset);
 
 $resql = $db->query($sql);
 
+$param = '';
+if ($search_socid > 0) {
+    $param .= '&search_socid=' . urlencode((string) $search_socid);
+}
+if ($search_credit_type > 0) {
+    $param .= '&search_credit_type=' . urlencode((string) $search_credit_type);
+}
+if ($search_user > 0) {
+    $param .= '&search_user=' . urlencode((string) $search_user);
+}
+if (!empty($search_date_start)) {
+    $param .= '&search_date_start_day=' . dol_print_date($search_date_start, '%d') . '&search_date_start_month=' . dol_print_date($search_date_start, '%m') . '&search_date_start_year=' . dol_print_date($search_date_start, '%Y');
+}
+if (!empty($search_date_end)) {
+    $param .= '&search_date_end_day=' . dol_print_date($search_date_end, '%d') . '&search_date_end_month=' . dol_print_date($search_date_end, '%m') . '&search_date_end_year=' . dol_print_date($search_date_end, '%Y');
+}
+
+$num = $resql ? $db->num_rows($resql) : 0;
+
+$newcardbutton = '';
+if (creditmanagerCanExport($user)) {
+    $newcardbutton .= dolGetButtonTitle($langs->trans('Export'), '', 'fa fa-download', $_SERVER['PHP_SELF'] . '?action=exportcsv&token=' . $token . $param, '', 1);
+}
+
+creditmanagerPrintDetachedSearchForm($sortfield, $sortorder, 'searchFormList');
+if ($action === 'edit' && $attrid > 0) {
+    print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'" id="editAttributionForm">';
+    print '<input type="hidden" name="token" value="'.$token.'">';
+    print '<input type="hidden" name="attrid" value="'.(int) $attrid.'">';
+    print '</form>';
+}
+
+print_barre_liste(
+    $langs->trans('CreditManagerAttributionHistory'),
+    $page,
+    $_SERVER['PHP_SELF'],
+    $param,
+    $sortfield,
+    $sortorder,
+    '',
+    $num,
+    $nbtotalofrecords,
+    'object_creditmanager@creditmanager',
+    0,
+    $newcardbutton,
+    '',
+    $limit,
+    0,
+    0,
+    1
+);
+
 if (!$resql) {
     dol_print_error($db);
 } else {
-    $num = $db->num_rows($resql);
-
-    $param = '';
-    if ($search_socid > 0) {
-        $param .= '&search_socid=' . urlencode($search_socid);
-    }
-    if ($search_credit_type > 0) {
-        $param .= '&search_credit_type=' . urlencode($search_credit_type);
-    }
-    if ($search_user > 0) {
-        $param .= '&search_user=' . urlencode($search_user);
-    }
-
     print '<div class="div-table-responsive">';
-    print '<table class="noborder centpercent">';
+    print '<table class="tagtable nobottomiftotal liste' . ($num > 0 ? '' : ' listempty') . '">';
+
+    print '<tr class="liste_titre_filter">';
+    print '<td class="liste_titre"></td>';
+    print '<td class="liste_titre nowrap">';
+    print $form->selectDate($search_date_start ?: -1, 'search_date_start_', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('From'));
+    print '<br>';
+    print $form->selectDate($search_date_end ?: -1, 'search_date_end_', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('To'));
+    print '</td>';
+    print '<td class="liste_titre">';
+    print $form->select_company($search_socid, 'search_socid', '', 1, 0, 0, array(), 0, 'maxwidth200');
+    print '</td>';
+    print '<td class="liste_titre">';
+    $resTypesF = $db->query($sqlTypes);
+    print '<select name="search_credit_type" class="flat maxwidth200">';
+    print '<option value="0">&nbsp;</option>';
+    if ($resTypesF) {
+        while ($objT = $db->fetch_object($resTypesF)) {
+            $sel = ($search_credit_type > 0 && (int) $objT->rowid === $search_credit_type) ? ' selected' : '';
+            print '<option value="' . (int) $objT->rowid . '"' . $sel . '>' . dol_escape_htmltag($objT->code . ' - ' . $objT->label) . '</option>';
+        }
+        $db->free($resTypesF);
+    }
+    print '</select>';
+    print '</td>';
+    print '<td class="liste_titre"></td>';
+    print '<td class="liste_titre">';
+    print $form->select_dolusers($search_user, 'search_user', 1, null, 0, '', '', 0, 0, 0, '', 0, '', 'maxwidth200');
+    print '</td>';
+    print '<td class="liste_titre"></td>';
+    print '<td class="liste_titre center maxwidthsearch">';
+    creditmanagerPrintListFilterButtons('searchFormList');
+    print '</td>';
+    print '</tr>';
 
     print '<tr class="liste_titre">';
     print_liste_field_titre($langs->trans('Ref'), $_SERVER['PHP_SELF'], 'm.rowid', '', $param, '', $sortfield, $sortorder);
@@ -784,7 +825,7 @@ if (!$resql) {
     print_liste_field_titre($langs->trans('Amount'), $_SERVER['PHP_SELF'], 'm.amount', '', $param, 'class="right"', $sortfield, $sortorder);
     print_liste_field_titre($langs->trans('User'), $_SERVER['PHP_SELF'], 'u.login', '', $param, '', $sortfield, $sortorder);
     print_liste_field_titre($langs->trans('Description'), $_SERVER['PHP_SELF'], 'm.description', '', $param, '', $sortfield, $sortorder);
-    print '<th class="center">' . $langs->trans('Action') . '</th>';
+    print_liste_field_titre($langs->trans('Action'), $_SERVER['PHP_SELF'], '', '', $param, 'class="center"', $sortfield, $sortorder);
     print '</tr>';
 
     $i = 0;
@@ -794,87 +835,55 @@ if (!$resql) {
             break;
         }
 
-        print '<tr class="oddeven">';
+        $isEditRow = ($action === 'edit' && (int) $attrid === (int) $obj->rowid);
+        print '<tr class="oddeven'.($isEditRow ? ' tredited' : '').'">';
 
         print '<td>' . (int) $obj->rowid . '</td>';
         print '<td>' . dol_print_date($db->jdate($obj->date_movement), 'dayhour') . '</td>';
 
-        // Client
         $thirdpartyUrl = DOL_URL_ROOT . '/societe/card.php?socid=' . (int) $obj->socid;
         print '<td><a href="' . $thirdpartyUrl . '">' . dol_escape_htmltag($obj->client_name) . '</a></td>';
 
-        // Credit type
         print '<td>' . dol_escape_htmltag($obj->type_code . ' - ' . $obj->type_label) . '</td>';
 
-        // Amount
-        print '<td class="right">' . creditmanagerFormatAmount($obj->amount) . '</td>';
+        if ($isEditRow) {
+            print '<td class="right"><input type="text" form="editAttributionForm" name="edit_amount" class="flat maxwidth75 right" value="' . dol_escape_htmltag(price2num($obj->amount, 'MT')) . '"></td>';
+        } else {
+            print '<td class="right">' . creditmanagerFormatAmount($obj->amount) . '</td>';
+        }
 
-        // User
         print '<td>' . dol_escape_htmltag($obj->login) . '</td>';
 
-        // Description
-        print '<td>' . dol_escape_htmltag($obj->description) . '</td>';
+        if ($isEditRow) {
+            print '<td><input type="text" form="editAttributionForm" name="edit_description" class="flat minwidth200" value="' . dol_escape_htmltag($obj->description) . '"></td>';
+        } else {
+            print '<td>' . dol_escape_htmltag($obj->description) . '</td>';
+        }
 
-        // Actions: edit + delete (cancel)
-        print '<td class="center">';
-        $editUrl = $_SERVER['PHP_SELF'] . '?action=edit&attrid=' . (int) $obj->rowid . '&token=' . $token;
-        $delUrl = $_SERVER['PHP_SELF'] . '?action=delete&attrid=' . (int) $obj->rowid . '&token=' . $token;
-        print '<a class="editfielda" href="' . $editUrl . '">' . img_edit() . '</a> ';
-        print '<a class="deletefielda" href="' . $delUrl . '">' . img_delete() . '</a>';
+        print '<td class="center nowraponall valignmiddle">';
+        if ($isEditRow) {
+            print '<input type="submit" form="editAttributionForm" class="reposition button buttongen marginbottomonly button-save" name="save" value="' . dol_escape_htmltag($langs->trans('Save')) . '"><br>';
+            print '<input type="submit" form="editAttributionForm" class="reposition button buttongen marginbottomonly button-cancel" name="cancel" value="' . dol_escape_htmltag($langs->trans('Cancel')) . '">';
+        } elseif (creditmanagerCanManageAttributions($user)) {
+            print '<a class="editfielda reposition paddingright" href="' . $_SERVER['PHP_SELF'] . '?action=edit&amp;attrid=' . (int) $obj->rowid . '&amp;token=' . $token . $param . '">' . img_edit() . '</a>';
+            print '<a class="reposition paddingleft" href="' . $_SERVER['PHP_SELF'] . '?action=delete&amp;attrid=' . (int) $obj->rowid . '&amp;token=' . $token . $param . '">' . img_delete() . '</a>';
+        }
         print '</td>';
 
         print '</tr>';
-
         $i++;
+    }
+
+    if ($num === 0) {
+        print '<tr class="oddeven"><td colspan="8" class="center opacitymedium">' . $langs->trans('None') . '</td></tr>';
     }
 
     print '</table>';
     print '</div>';
-
     $db->free($resql);
-
-    print '<br>';
 }
 
-// Simple modal-like workflow for edit/delete (using separate action-handling above)
-if ($action === 'edit' && $attrid > 0) {
-    // Fetch row for inline edit form
-    $sql = 'SELECT rowid, amount, description';
-    $sql .= ' FROM ' . $db->prefix() . 'credits_movements';
-    $sql .= " WHERE rowid = " . (int) $attrid;
-    $sql .= " AND type_movement = '" . $db->escape(CREDITMVT_TYPE_ATTRIBUTION) . "'";
-
-    $res = $db->query($sql);
-    if ($res) {
-        $obj = $db->fetch_object($res);
-        $db->free($res);
-        if ($obj) {
-            print '<div class="fichecenter">';
-            print '<form action="' . $_SERVER['PHP_SELF'] . '" method="POST">';
-            print '<input type="hidden" name="token" value="' . $token . '">';
-            print '<input type="hidden" name="action" value="update">';
-            print '<input type="hidden" name="attrid" value="' . (int) $attrid . '">';
-
-            print load_fiche_titre($langs->trans('Modify'), '', '');
-
-            print '<table class="noborder centpercent">';
-            print '<tr class="liste_titre"><td>' . $langs->trans('Amount') . '</td><td>' . $langs->trans('Description') . '</td></tr>';
-            print '<tr class="oddeven">';
-            print '<td><input type="text" name="amount" class="flat maxwidth100" value="' . creditmanagerFormatAmount($obj->amount, 1) . '"></td>';
-            print '<td><input type="text" name="description" class="flat minwidth300" value="' . dol_escape_htmltag($obj->description) . '"></td>';
-            print '</tr>';
-            print '</table>';
-
-            print '<div class="center">';
-            print '<input type="submit" class="button" value="' . $langs->trans('Save') . '"> ';
-            print '<a class="button" href="' . $_SERVER['PHP_SELF'] . '?token=' . $token . '">' . $langs->trans('Cancel') . '</a>';
-            print '</div>';
-
-            print '</form>';
-            print '</div>';
-        }
-    }
-}
+creditmanagerPrintBindFiltersToSearchForm('searchFormList');
 
 if ($action === 'delete' && $attrid > 0) {
     $formconfirm = $form->formconfirm(
@@ -893,4 +902,3 @@ print dol_get_fiche_end();
 
 llxFooter();
 $db->close();
-

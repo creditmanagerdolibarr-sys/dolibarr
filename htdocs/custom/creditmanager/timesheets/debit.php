@@ -74,12 +74,12 @@ if (empty($sortfield) || !isset($allowedSort[$sortfield])) {
 	$sortfield = 'et.element_date';
 }
 
-$search_socid = GETPOSTINT('search_socid');
-$search_projectid = GETPOSTINT('search_projectid');
-$search_credit_type = GETPOSTINT('search_credit_type');
+$search_socid = creditmanagerNormalizeSearchId(GETPOSTINT('search_socid'));
+$search_projectid = creditmanagerNormalizeSearchId(GETPOSTINT('search_projectid'));
+$search_credit_type = creditmanagerNormalizeSearchId(GETPOSTINT('search_credit_type'));
 $search_manual_only = GETPOSTINT('search_manual_only');
 $search_deferred_due = GETPOSTINT('search_deferred_due');
-$search_fk_user = GETPOSTINT('search_fk_user');
+$search_fk_user = creditmanagerNormalizeSearchId(GETPOSTINT('search_fk_user'));
 $search_hours_min = GETPOST('search_hours_min', 'alphanohtml');
 $search_hours_max = GETPOST('search_hours_max', 'alphanohtml');
 $search_text = trim(GETPOST('search_text', 'restricthtml'));
@@ -133,13 +133,13 @@ function creditmanager_manual_debit_list_sql($db, $conf, $filters)
 	$sql .= " AND NOT EXISTS (SELECT 1 FROM ".$db->prefix()."credits_movements AS mr";
 	$sql .= " WHERE mr.fk_parent_movement = md.rowid AND mr.type_movement = 'REFUND'))";
 
-	if (!empty($filters['socid'])) {
+	if (!empty($filters['socid']) && (int) $filters['socid'] > 0) {
 		$sql .= " AND pr.fk_soc = ".((int) $filters['socid']);
 	}
-	if (!empty($filters['projectid'])) {
+	if (!empty($filters['projectid']) && (int) $filters['projectid'] > 0) {
 		$sql .= " AND pr.rowid = ".((int) $filters['projectid']);
 	}
-	if (!empty($filters['credit_type'])) {
+	if (!empty($filters['credit_type']) && (int) $filters['credit_type'] > 0) {
 		$sql .= " AND rel.fk_credits_types = ".((int) $filters['credit_type']);
 	}
 	if (!empty($filters['manual_only'])) {
@@ -150,7 +150,7 @@ function creditmanager_manual_debit_list_sql($db, $conf, $filters)
 		$sql .= " AND rel.approval_date IS NOT NULL";
 		$sql .= " AND DATE_ADD(rel.approval_date, INTERVAL ct.debit_delay_days DAY) <= '".$db->idate(dol_now())."'";
 	}
-	if (!empty($filters['fk_user'])) {
+	if (!empty($filters['fk_user']) && (int) $filters['fk_user'] > 0) {
 		$sql .= " AND et.fk_user = ".((int) $filters['fk_user']);
 	}
 	if ($filters['hours_min'] !== '' && $filters['hours_min'] !== null && is_numeric($filters['hours_min'])) {
@@ -248,7 +248,7 @@ $sqlSelect .= $sqlBase;
 // --- Action: single debit (GET with token) ---
 $debit = new CreditDebit($db);
 
-if ($action === 'debit' && GETPOST('token', 'alpha')) {
+if (creditmanagerAllowMutatingAction() && $action === 'debit' && GETPOST('token', 'alpha')) {
 	$tid = GETPOSTINT('tid');
 	if ($tid > 0) {
 		$prev = creditmanager_element_time_debit_preview($db, $tid);
@@ -346,7 +346,7 @@ foreach (array(
 		$param .= '&'.$k.'='.urlencode((string) $v);
 	} elseif ($k === 'search_hours_min' || $k === 'search_hours_max') {
 		$param .= '&'.$k.'='.urlencode((string) $v);
-	} elseif ((int) $v !== 0) {
+	} elseif ((int) $v > 0) {
 		$param .= '&'.$k.'='.((int) $v);
 	}
 }
@@ -366,28 +366,32 @@ if (creditmanagerCanApproveTimesheets($user)) {
 	print '<p class="marginbottomonly"><a href="'.dol_buildpath('/custom/creditmanager/timesheets/approve.php', 1).'">'.$langs->trans('CreditTimesheetApproveTitle').'</a> <span class="opacitymedium">('.$langs->trans('CreditTimesheetApproveLinkHint').')</span></p>';
 }
 
-print '<form method="GET" action="'.$_SERVER['PHP_SELF'].'" name="search_form_debit">';
-print '<input type="hidden" name="sortfield" value="'.dol_escape_htmltag($sortfield).'"/>';
-print '<input type="hidden" name="sortorder" value="'.dol_escape_htmltag($sortorder).'"/>';
+creditmanagerPrintDetachedSearchForm($sortfield, $sortorder, 'searchFormList');
 
-print_barre_liste($langs->trans('CreditManualDebitListTitle'), $page, $_SERVER['PHP_SELF'], $param, $sortfield, $sortorder, '', $totalRecords, '', '');
+$newcardbutton = '';
+if (creditmanagerCanExport($user)) {
+	$newcardbutton .= dolGetButtonTitle($langs->trans('ExportCSV'), '', 'fa fa-download', $_SERVER['PHP_SELF'].'?action=exportcsv&token='.urlencode($token).$param, '', 1);
+}
 
-print '<div class="div-table-responsive-no-min">';
-print '<table class="noborder centpercent">';
-print '<tr class="liste_titre liste_titre_filter">';
-print '<td>'.$langs->trans('ThirdParty').'</td>';
-print '<td>'.$langs->trans('Project').'</td>';
-print '<td>'.$langs->trans('CreditType').'</td>';
-print '<td colspan="2">'.$langs->trans('DateRange').'</td>';
-print '<td>'.$langs->trans('User').'</td>';
-print '<td class="right">'.$langs->trans('CreditManagerActions').'</td>';
-print '</tr>';
-print '<tr class="oddeven">';
-print '<td>';
-print $form->select_company($search_socid, 'search_socid', '', 1, 0, 0, array(), 0, 'minwidth200', '', 0, 0, array(), false);
-print '</td><td>';
-print $formproject->select_projects($search_socid > 0 ? $search_socid : -1, $search_projectid, 'search_projectid', 24, 0, 1, 0, 0, 0, 0, '', 0, 0, 'maxwidth300', '', '');
-print '</td><td>';
+print_barre_liste($langs->trans('CreditManualDebitListTitle'), $page, $_SERVER['PHP_SELF'], $param, $sortfield, $sortorder, '', $totalRecords, $totalRecords, '', 0, $newcardbutton);
+
+print '<div class="div-table-responsive">';
+print '<table class="tagtable nobottomiftotal liste">';
+print '<tr class="liste_titre_filter">';
+print '<td class="liste_titre nowrap">';
+print $form->selectDate($search_date_start ?: -1, 'search_date_start_', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('From'));
+print '<br>';
+print $form->selectDate($search_date_end ?: -1, 'search_date_end_', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('To'));
+print '</td>';
+print '<td class="liste_titre"><input type="text" class="flat minwidth150" name="search_text" value="'.dol_escape_htmltag($search_text).'" placeholder="'.$langs->trans('Search').'"></td>';
+print '<td class="liste_titre">';
+print $form->select_company($search_socid > 0 ? $search_socid : 0, 'search_socid', '', 1, 0, 0, array(), 0, 'minwidth200', '', 0, 0, array(), false);
+print '</td><td class="liste_titre">';
+print $formproject->select_projects($search_socid > 0 ? $search_socid : -1, $search_projectid > 0 ? $search_projectid : 0, 'search_projectid', 24, 0, 1, 0, 0, 0, 0, '', 0, 0, 'maxwidth300', '', '');
+print '</td>';
+print '<td class="liste_titre nowrap">'.$langs->trans('HoursMin').' <input type="text" size="4" name="search_hours_min" value="'.dol_escape_htmltag($search_hours_min).'"> ';
+print $langs->trans('HoursMax').' <input type="text" size="4" name="search_hours_max" value="'.dol_escape_htmltag($search_hours_max).'"></td>';
+print '<td class="liste_titre">';
 $sqlTypes = 'SELECT rowid, code FROM '.$db->prefix().'credits_types WHERE entity IN ('.$entityType.') AND active = 1 ORDER BY code';
 $resTypes = $db->query($sqlTypes);
 print '<select name="search_credit_type" class="flat maxwidth200"><option value="0"></option>';
@@ -399,34 +403,15 @@ if ($resTypes) {
 	$db->free($resTypes);
 }
 print '</select></td>';
-print '<td colspan="2" class="nowrap">';
-print $form->selectDate($search_date_start ?: -1, 'search_date_start_', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('From'));
-print ' ';
-print $form->selectDate($search_date_end ?: -1, 'search_date_end_', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('To'));
+print '<td class="liste_titre">';
 print '</td>';
-print '<td>';
-print $form->select_users($search_fk_user, 'search_fk_user', 1);
+print '<td class="liste_titre">';
+print $form->select_users($search_fk_user > 0 ? $search_fk_user : -1, 'search_fk_user', 1);
 print '</td>';
-print '<td class="right nowrap">';
-print '<input type="submit" class="button small" name="button_search" value="'.$langs->trans('Search').'"> ';
-print '<input type="submit" class="button small" name="button_removefilter" value="'.$langs->trans('Reset').'"> ';
-print '<a class="button small" href="'.$_SERVER['PHP_SELF'].'?action=exportcsv&token='.urlencode($token).$param.'">'.$langs->trans('ExportCSV').'</a>';
+print '<td class="liste_titre center maxwidthsearch">';
+creditmanagerPrintListFilterButtons('searchFormList');
 print '</td>';
 print '</tr>';
-print '<tr class="oddeven">';
-print '<td colspan="2"><label><input type="checkbox" name="search_manual_only" value="1"'.(!empty($search_manual_only) ? ' checked' : '').'> ';
-print $langs->trans('CreditManualDebitFilterManualOnly').'</label></td>';
-print '<td colspan="2"><label><input type="checkbox" name="search_deferred_due" value="1"'.(!empty($search_deferred_due) ? ' checked' : '').'> ';
-print $langs->trans('CreditManualDebitFilterDeferredDue').'</label></td>';
-print '<td class="nowrap">'.$langs->trans('HoursMin').' <input type="text" size="4" name="search_hours_min" value="'.dol_escape_htmltag($search_hours_min).'"> ';
-print $langs->trans('HoursMax').' <input type="text" size="4" name="search_hours_max" value="'.dol_escape_htmltag($search_hours_max).'"></td>';
-print '<td colspan="2"><input type="text" class="flat minwidth200" name="search_text" value="'.dol_escape_htmltag($search_text).'" placeholder="'.$langs->trans('Search').'"></td>';
-print '</tr>';
-print '</table>';
-print '</div>';
-
-print '<div class="div-table-responsive">';
-print '<table class="noborder centpercent">';
 print '<tr class="liste_titre">';
 print_liste_field_titre($langs->trans('Date'), $_SERVER['PHP_SELF'], 'et.element_date', '', $param, '', $sortfield, $sortorder);
 print '<th>'.$langs->trans('Ref').'</th>';
@@ -472,8 +457,12 @@ if ($resql) {
 		print '<td class="center nowrap">';
 		$chk = $prev ? checkDebitPossible($prev['fk_soc'], $prev['fk_proj'], $prev['fk_credit_type'], $prev['hours'], $db) : array('ok' => false);
 		if (!empty($chk['ok'])) {
-			$url = $_SERVER['PHP_SELF'].'?action=debit&tid='.((int) $obj->rowid).'&token='.urlencode($token).$param;
-			print '<a class="butAction" href="'.dol_escape_htmltag($url).'" onclick="return confirm(\''.dol_escape_js($langs->trans('CreditManualDebitOneConfirm')).'\');">'.$langs->trans('Debit').'</a>';
+			print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'" class="inline-block" onsubmit="return confirm(\''.dol_escape_js($langs->trans('CreditManualDebitOneConfirm')).'\');">';
+			print '<input type="hidden" name="token" value="'.newToken().'">';
+			print '<input type="hidden" name="action" value="debit">';
+			print '<input type="hidden" name="tid" value="'.((int) $obj->rowid).'">';
+			print '<button type="submit" class="butAction">'.$langs->trans('Debit').'</button>';
+			print '</form>';
 		} else {
 			print '<span class="opacitymedium" title="'.dol_escape_htmltag(!empty($chk['error']) ? $langs->trans($chk['error']) : '').'">—</span>';
 		}
@@ -491,8 +480,7 @@ if ($resql) {
 
 print '</table>';
 print '</div>';
-
-print '</form>';
+creditmanagerPrintBindFiltersToSearchForm('searchFormList');
 
 llxFooter();
 $db->close();

@@ -150,7 +150,7 @@ if ($action === 'export' && creditmanagerCanExport($user)) {
 	}
 }
 
-if ($action === 'send_alert_emails' && creditmanagerCanExport($user)) {
+if ($action === 'send_alert_emails' && !creditmanagerIsListFilterSubmit() && creditmanagerCanExport($user)) {
 	$sent = 0;
 	$errors = 0;
 	$seen = array();
@@ -189,7 +189,7 @@ if ($action === 'send_alert_emails' && creditmanagerCanExport($user)) {
 	setEventMessages($langs->trans('CreditReportForecastEmailResult', $sent, $errors), null, $errors > 0 ? 'warnings' : 'mesgs');
 }
 
-if ($action === 'generate_report' && creditmanagerCanExport($user)) {
+if ($action === 'generate_report' && !creditmanagerIsListFilterSubmit() && creditmanagerCanExport($user)) {
 	require_once DOL_DOCUMENT_ROOT.'/core/lib/pdf.lib.php';
 
 	$dir = DOL_DATA_ROOT.'/creditmanager/reports';

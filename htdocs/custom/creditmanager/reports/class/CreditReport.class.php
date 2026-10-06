@@ -14,6 +14,7 @@
  */
 
 require_once DOL_DOCUMENT_ROOT.'/core/class/commonobject.class.php';
+dol_include_once('/creditmanager/lib/creditmanager.lib.php');
 
 class CreditReport extends CommonObject
 {
@@ -89,6 +90,8 @@ class CreditReport extends CommonObject
 		if ($typeIn !== '') {
 			$sql .= " AND m.fk_credit_type IN (".$typeIn.")";
 		}
+
+		$sql .= creditmanagerSqlExcludeCancelledAttributionMovements('m');
 
 		$sql .= " GROUP BY m.fk_soc, s.nom, m.fk_credit_type, t.code, t.label, month_key";
 		$sql .= " ORDER BY month_key ASC, s.nom ASC, t.code ASC";

@@ -75,7 +75,7 @@ $form = new Form($db);
  * Actions
  */
 
-if ($action == 'setparam' && creditmanagerCanManageAdmin($user)) {
+if ($action == 'setparam' && creditmanagerAllowMutatingAction() && creditmanagerCanManageAdmin($user)) {
 	// Low balance alert threshold
 	$low_balance_threshold = GETPOST('CREDITMANAGER_LOW_BALANCE_THRESHOLD', 'alphanohtml');
 	if ($low_balance_threshold !== '') {

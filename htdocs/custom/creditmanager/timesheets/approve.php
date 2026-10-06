@@ -61,9 +61,9 @@ if (empty($sortfield)) {
 	$sortfield = 'et.element_date';
 }
 
-$search_socid = GETPOSTINT('search_socid');
-$search_projectid = GETPOSTINT('search_projectid');
-$search_fk_user = GETPOSTINT('search_fk_user');
+$search_socid = creditmanagerNormalizeSearchId(GETPOSTINT('search_socid'));
+$search_projectid = creditmanagerNormalizeSearchId(GETPOSTINT('search_projectid'));
+$search_fk_user = creditmanagerNormalizeSearchId(GETPOSTINT('search_fk_user'));
 $search_text = trim(GETPOST('search_text', 'restricthtml'));
 $search_date_start = dol_mktime(0, 0, 0, GETPOSTINT('search_date_start_month'), GETPOSTINT('search_date_start_day'), GETPOSTINT('search_date_start_year'));
 $search_date_end = dol_mktime(23, 59, 59, GETPOSTINT('search_date_end_month'), GETPOSTINT('search_date_end_day'), GETPOSTINT('search_date_end_year'));
@@ -106,13 +106,13 @@ function creditmanager_approve_list_sql($db, $user, $filters)
 
 	$sql .= creditmanagerTimesheetScopeProjectWhereSql($db, $user, 'pr');
 
-	if (!empty($filters['socid'])) {
+	if (!empty($filters['socid']) && (int) $filters['socid'] > 0) {
 		$sql .= " AND pr.fk_soc = ".((int) $filters['socid']);
 	}
-	if (!empty($filters['projectid'])) {
+	if (!empty($filters['projectid']) && (int) $filters['projectid'] > 0) {
 		$sql .= " AND pr.rowid = ".((int) $filters['projectid']);
 	}
-	if (!empty($filters['fk_user'])) {
+	if (!empty($filters['fk_user']) && (int) $filters['fk_user'] > 0) {
 		$sql .= " AND et.fk_user = ".((int) $filters['fk_user']);
 	}
 	if (!empty($filters['date_start'])) {
@@ -138,7 +138,7 @@ $filters = array(
 );
 $sqlBase = creditmanager_approve_list_sql($db, $user, $filters);
 
-if ($action === 'approve' && GETPOST('token', 'alpha')) {
+if (creditmanagerAllowMutatingAction() && $action === 'approve' && GETPOST('token', 'alpha')) {
 	$tid = GETPOSTINT('tid');
 	$typeid = GETPOSTINT('fk_credit_type');
 	if ($tid > 0 && $typeid > 0) {
@@ -155,7 +155,7 @@ if ($action === 'approve' && GETPOST('token', 'alpha')) {
 	exit;
 }
 
-if ($action === 'reject' && GETPOST('token', 'alpha')) {
+if (creditmanagerAllowMutatingAction() && $action === 'reject' && GETPOST('token', 'alpha')) {
 	$tid = GETPOSTINT('tid');
 	$comment = trim(GETPOST('reject_comment', 'restricthtml'));
 	if ($tid > 0) {
@@ -219,41 +219,34 @@ if (creditmanagerCanManualDebit($user)) {
 	print '<p class="marginbottomonly"><a href="'.dol_buildpath('/custom/creditmanager/timesheets/debit.php', 1).'">'.$langs->trans('CreditManagerManualDebit').'</a></p>';
 }
 
-print '<form method="GET" action="'.$_SERVER['PHP_SELF'].'">';
-print '<input type="hidden" name="sortfield" value="'.dol_escape_htmltag($sortfield).'"/>';
-print '<input type="hidden" name="sortorder" value="'.dol_escape_htmltag($sortorder).'"/>';
+creditmanagerPrintDetachedSearchForm($sortfield, $sortorder, 'searchFormList');
 
 print_barre_liste($langs->trans('CreditTimesheetApproveListTitle'), $page, $_SERVER['PHP_SELF'], $param, $sortfield, $sortorder, '', $totalRecords, '', '');
 
-print '<div class="div-table-responsive-no-min">';
-print '<table class="noborder centpercent">';
-print '<tr class="liste_titre liste_titre_filter">';
-print '<td>'.$langs->trans('ThirdParty').'</td>';
-print '<td>'.$langs->trans('Project').'</td>';
-print '<td colspan="2">'.$langs->trans('DateRange').'</td>';
-print '<td>'.$langs->trans('User').'</td>';
-print '<td class="right">'.$langs->trans('CreditManagerActions').'</td>';
-print '</tr>';
-print '<tr class="oddeven">';
-print '<td>';
-creditmanagerPrintScopedCompanySelect($form, $db, $financialScope, $search_socid, 'search_socid', $entitySoc);
-print '</td><td>';
-print $formproject->select_projects($search_socid > 0 ? $search_socid : -1, $search_projectid, 'search_projectid', 24, 0, 1, 0, 0, 0, 0, '', 0, 0, 'maxwidth300', '', '');
-print '</td><td colspan="2" class="nowrap">';
+print '<div class="div-table-responsive">';
+print '<table class="tagtable nobottomiftotal liste">';
+print '<tr class="liste_titre_filter">';
+print '<td class="liste_titre nowrap">';
 print $form->selectDate($search_date_start ?: -1, 'search_date_start_', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('From'));
-print ' ';
+print '<br>';
 print $form->selectDate($search_date_end ?: -1, 'search_date_end_', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('To'));
-print '</td><td>';
-print $form->select_users($search_fk_user, 'search_fk_user', 1);
-print '</td><td class="right nowrap">';
-print '<input type="submit" class="button small" name="button_search" value="'.$langs->trans('Search').'"> ';
-print '<input type="submit" class="button small" name="button_removefilter" value="'.$langs->trans('Reset').'">';
-print '</td></tr>';
-print '<tr class="oddeven"><td colspan="6"><input type="text" class="flat minwidth300" name="search_text" value="'.dol_escape_htmltag($search_text).'" placeholder="'.$langs->trans('Search').'"></td></tr>';
-print '</table></div>';
-print '</form>';
-
-print '<div class="div-table-responsive"><table class="noborder centpercent">';
+print '</td>';
+print '<td class="liste_titre"><input type="text" class="flat minwidth150" name="search_text" value="'.dol_escape_htmltag($search_text).'" placeholder="'.$langs->trans('Search').'"></td>';
+print '<td class="liste_titre">';
+creditmanagerPrintScopedCompanySelect($form, $db, $financialScope, $search_socid, 'search_socid', $entitySoc);
+print '</td>';
+print '<td class="liste_titre">';
+print $formproject->select_projects($search_socid > 0 ? $search_socid : -1, $search_projectid > 0 ? $search_projectid : 0, 'search_projectid', 24, 0, 1, 0, 0, 0, 0, '', 0, 0, 'maxwidth300', '', '');
+print '</td>';
+print '<td class="liste_titre"></td>';
+print '<td class="liste_titre"></td>';
+print '<td class="liste_titre">';
+print $form->select_users($search_fk_user > 0 ? $search_fk_user : -1, 'search_fk_user', 1);
+print '</td>';
+print '<td class="liste_titre center maxwidthsearch">';
+creditmanagerPrintListFilterButtons('searchFormList');
+print '</td>';
+print '</tr>';
 print '<tr class="liste_titre">';
 print_liste_field_titre($langs->trans('Date'), $_SERVER['PHP_SELF'], 'et.element_date', '', $param, '', $sortfield, $sortorder);
 print '<th>'.$langs->trans('Ref').'</th>';
@@ -318,6 +311,7 @@ if ($resql) {
 }
 
 print '</table></div>';
+creditmanagerPrintBindFiltersToSearchForm('searchFormList');
 
 llxFooter();
 $db->close();

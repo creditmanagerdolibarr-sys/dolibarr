@@ -126,7 +126,7 @@ $entityMovement = getEntity('credits_movement');
  * Actions
  */
 
-if (!$isShareView && $action === 'request_credits' && getDolGlobalInt('CREDITMANAGER_ALLOW_CLIENT_CREDIT_REQUEST', 0)) {
+if (!$isShareView && creditmanagerAllowMutatingAction() && $action === 'request_credits' && getDolGlobalInt('CREDITMANAGER_ALLOW_CLIENT_CREDIT_REQUEST', 0)) {
 	$requestType = GETPOSTINT('request_credit_type');
 	$requestAmount = price2num(GETPOST('request_amount', 'alphanohtml'), 'MT');
 	$requestMessage = GETPOST('request_message', 'restricthtml');
@@ -177,7 +177,7 @@ if (!$isShareView && $action === 'request_credits' && getDolGlobalInt('CREDITMAN
 	exit;
 }
 
-if (!$isShareView && $action === 'create_share') {
+if (!$isShareView && creditmanagerAllowMutatingAction() && $action === 'create_share') {
 	$ttl = (int) getDolGlobalString('CREDITMANAGER_CLIENT_SHARE_TTL_HOURS', '48');
 	$share = creditmanagerCreateBalanceShareToken($socid, $ttl);
 	$shareUrl = dol_buildpath('/custom/creditmanager/client/balance.php', 2).'?share='.urlencode($share);

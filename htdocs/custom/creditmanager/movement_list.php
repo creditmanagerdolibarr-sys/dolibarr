@@ -205,6 +205,7 @@ if ($resCount) {
 }
 
 $sql = 'SELECT m.rowid, m.date_movement, m.amount, m.balance_after, m.type_movement, m.description, m.fk_soc,';
+$sql .= ' '.creditmanagerSqlCancelledAttributionFlag('m').' as is_cancelled,';
 $sql .= ' t.code as type_code, t.label as type_label, s.nom as socname, u.login';
 $sql .= ' FROM '.MAIN_DB_PREFIX.'credits_movements as m';
 $sql .= ' INNER JOIN '.MAIN_DB_PREFIX.'credits_types as t ON t.rowid = m.fk_credit_type';
@@ -239,7 +240,8 @@ if (!empty($search_date_end)) {
 	$param .= '&search_date_end_day='.dol_print_date($search_date_end, '%d').'&search_date_end_month='.dol_print_date($search_date_end, '%m').'&search_date_end_year='.dol_print_date($search_date_end, '%Y');
 }
 
-llxHeader('', $langs->trans('CreditMovements'), '', '', 0, 0, '', '', '', 'mod-creditmanager page-movement_list');
+$morecss = array('/custom/creditmanager/css/creditmanager.css');
+llxHeader('', $langs->trans('CreditMovements'), '', '', 0, 0, '', $morecss, '', 'mod-creditmanager page-movement_list');
 
 print load_fiche_titre($langs->trans('CreditMovements'), '', 'object_credit@creditmanager');
 
@@ -251,27 +253,27 @@ print '<div class="opacitymedium marginbottomonly">';
 print $langs->trans('CreditMovementsListHelp');
 print '</div>';
 
-print '<form method="GET" action="'.$_SERVER['PHP_SELF'].'" name="search_form_movement">';
-print '<input type="hidden" name="sortfield" value="'.dol_escape_htmltag($sortfield).'"/>';
-print '<input type="hidden" name="sortorder" value="'.dol_escape_htmltag($sortorder).'"/>';
+$newcardbutton = '';
+if (creditmanagerCanExport($user)) {
+	$newcardbutton .= dolGetButtonTitle($langs->trans('ExportCSV'), '', 'fa fa-download', dol_buildpath('/custom/creditmanager/movement_list.php', 1).'?action=exportcsv&token='.$token.$param, '', 1);
+}
 
-print_barre_liste($langs->trans('CreditMovements'), $page, $_SERVER['PHP_SELF'], $param, $sortfield, $sortorder, '', $totalRecords, '', '');
+creditmanagerPrintDetachedSearchForm($sortfield, $sortorder, 'searchFormList');
 
-print '<div class="div-table-responsive-no-min">';
-print '<table class="noborder centpercent">';
-print '<tr class="liste_titre liste_titre_filter">';
-print '<th>'.$langs->trans('ThirdParty').'</th>';
-print '<th>'.$langs->trans('CreditType').'</th>';
-print '<th>'.$langs->trans('DateRange').'</th>';
-print '<th>'.$langs->trans('MovementType').'</th>';
-print '<th>'.$langs->trans('Search').'</th>';
-print '<th class="right">'.$langs->trans('CreditManagerActions').'</th>';
-print '</tr>';
-print '<tr class="oddeven">';
-print '<td>';
+print_barre_liste($langs->trans('CreditMovements'), $page, $_SERVER['PHP_SELF'], $param, $sortfield, $sortorder, '', $totalRecords, $totalRecords, '', 0, $newcardbutton);
+
+print '<div class="div-table-responsive">';
+print '<table class="tagtable nobottomiftotal liste">';
+print '<tr class="liste_titre_filter">';
+print '<td class="liste_titre nowrap">';
+print $form->selectDate($search_date_start ?: -1, 'search_date_start_', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('From'));
+print '<br>';
+print $form->selectDate($search_date_end ?: -1, 'search_date_end_', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('To'));
+print '</td>';
+print '<td class="liste_titre">';
 creditmanagerPrintScopedCompanySelect($form, $db, $financialScope, $search_socid, 'search_socid', $entitySoc);
 print '</td>';
-print '<td>';
+print '<td class="liste_titre">';
 $sqlTypes = 'SELECT rowid, code, label FROM '.MAIN_DB_PREFIX.'credits_types';
 $sqlTypes .= ' WHERE entity IN ('.$entityType.') AND active = 1 ORDER BY code';
 $resTypes = $db->query($sqlTypes);
@@ -285,29 +287,20 @@ if ($resTypes) {
 	$db->free($resTypes);
 }
 print '</select></td>';
-print '<td class="nowrap">';
-print $form->selectDate($search_date_start ?: -1, 'search_date_start_', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('From'));
-print ' ';
-print $form->selectDate($search_date_end ?: -1, 'search_date_end_', 0, 0, 1, '', 1, 0, 0, '', '', '', '', 1, '', $langs->trans('To'));
-print '</td>';
-print '<td>';
+print '<td class="liste_titre"></td>';
+print '<td class="liste_titre"></td>';
+print '<td class="liste_titre">';
 print '<select name="search_movement_type" class="flat maxwidth100">';
 print '<option value=""'.($search_movement_type === '' ? ' selected' : '').'></option>';
 print '<option value="credit"'.($search_movement_type === 'credit' ? ' selected' : '').'>'.$langs->trans('Credit').'</option>';
 print '<option value="debit"'.($search_movement_type === 'debit' ? ' selected' : '').'>'.$langs->trans('Debit').'</option>';
 print '</select></td>';
-print '<td><input type="text" class="flat maxwidth200" name="search_desc" value="'.dol_escape_htmltag($search_desc).'" placeholder="'.$langs->trans('CreditMovementSearchDesc').'"></td>';
-print '<td class="right nowrap">';
-print '<input type="submit" class="button small" name="button_search" value="'.$langs->trans('Search').'"> ';
-print '<input type="submit" class="button small" name="button_removefilter" value="'.$langs->trans('Reset').'"> ';
-print '<a class="button small" href="'.dol_buildpath('/custom/creditmanager/movement_list.php', 1).'?action=exportcsv&token='.$token.$param.'">'.$langs->trans('ExportCSV').'</a>';
+print '<td class="liste_titre"><input type="text" class="flat maxwidth200" name="search_desc" value="'.dol_escape_htmltag($search_desc).'" placeholder="'.$langs->trans('CreditMovementSearchDesc').'"></td>';
+print '<td class="liste_titre"></td>';
+print '<td class="liste_titre center maxwidthsearch">';
+creditmanagerPrintListFilterButtons('searchFormList');
 print '</td>';
 print '</tr>';
-print '</table>';
-print '</div>';
-
-print '<div class="div-table-responsive">';
-print '<table class="noborder centpercent">';
 print '<tr class="liste_titre">';
 print_liste_field_titre($langs->trans('Date'), $_SERVER['PHP_SELF'], 'm.date_movement', '', $param, '', $sortfield, $sortorder);
 print_liste_field_titre($langs->trans('ThirdParty'), $_SERVER['PHP_SELF'], 's.nom', '', $param, '', $sortfield, $sortorder);
@@ -331,7 +324,11 @@ if ($resql) {
 		if (!$obj) {
 			break;
 		}
-		print '<tr class="oddeven">';
+		$trClass = 'oddeven';
+		if (!empty($obj->is_cancelled)) {
+			$trClass .= ' creditmanager-cancelled';
+		}
+		print '<tr class="'.$trClass.'">';
 		print '<td>'.dol_print_date($db->jdate($obj->date_movement), 'dayhour').'</td>';
 		print '<td><a href="'.DOL_URL_ROOT.'/societe/card.php?socid='.((int) $obj->fk_soc).'">'.dol_escape_htmltag($obj->socname).'</a></td>';
 		print '<td>'.dol_escape_htmltag($obj->type_code.' - '.$obj->type_label).'</td>';
@@ -343,6 +340,7 @@ if ($resql) {
 		print '<td>'.dol_escape_htmltag($obj->login).'</td>';
 		print '<td class="center nowrap">';
 		print '<a class="paddingright" href="'.$linkCreditsTab.'?socid='.((int) $obj->fk_soc).'" title="'.dol_escape_htmltag($langs->trans('Credits')).'">'.img_picto('', 'company').'</a>';
+		creditmanagerPrintAttributionListActions($user, $obj->type_movement, (int) $obj->rowid, (int) $obj->is_cancelled);
 		print '</td>';
 		print '</tr>';
 		$i++;
@@ -357,7 +355,7 @@ if ($resql) {
 
 print '</table>';
 print '</div>';
-print '</form>';
+creditmanagerPrintBindFiltersToSearchForm('searchFormList');
 
 llxFooter();
 $db->close();
