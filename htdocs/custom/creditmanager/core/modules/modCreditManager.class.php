@@ -36,14 +36,14 @@ class modCreditManager extends DolibarrModules
 		$this->version = '1.1.0';
 		$this->const_name = 'MAIN_MODULE_'.strtoupper($this->name);
 		$this->picto = 'bill';
-		$this->editor_name = 'Joel MPUNGA and Doddy MATABARO';
+		$this->editor_name = 'Joel MPUNGA, Doddy MATABARO and Franck Sefu';
 
 		$this->dirs = array();
 
 		$this->module_parts = array(
 			'triggers' => 1,
 			'hooks' => array(
-				'data' => array('tasktimelist', 'main'),
+				'data' => array('tasktimelist','invoicecard', 'invoiceline','globalcard', 'main'),
 				'entity' => '0',
 			),
 			// Allow top/left menus of this module for external (client) users
