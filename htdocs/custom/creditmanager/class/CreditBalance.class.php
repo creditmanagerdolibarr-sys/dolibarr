@@ -64,6 +64,16 @@ class CreditBalance extends CommonObject
 	public $balance;
 
 	/**
+	 * @var float Balance amount
+	 */
+	public $status_balance;
+
+	/**
+	 * @var float Balance amount
+	 */
+	public $fk_facturedet;
+
+	/**
 	 *	Constructor
 	 *
 	 *	@param	DoliDB	$db		Database handler
@@ -82,7 +92,7 @@ class CreditBalance extends CommonObject
 	 *	@param	int		$fk_credit_type	Credit type ID
 	 *	@return	int						<0 if KO, >0 if OK, 0 if not found
 	 */
-	public function fetch($id = 0, $fk_soc = 0, $fk_credit_type = 0)
+	public function fetch($id = 0, $fk_soc = 0, $fk_credit_type = 0, $fk_facturedet = 0)
 	{
 		global $conf;
 
@@ -95,6 +105,8 @@ class CreditBalance extends CommonObject
 		} elseif ($fk_soc > 0 && $fk_credit_type > 0) {
 			$sql .= " AND fk_soc = ".((int) $fk_soc);
 			$sql .= " AND fk_credit_type = ".((int) $fk_credit_type);
+		}elseif ($fk_facturedet > 0) {
+			$sql .= " AND fk_facturedet = ".((int) $fk_facturedet);
 		} else {
 			return -1;
 		}
@@ -136,13 +148,17 @@ class CreditBalance extends CommonObject
 
 		$this->db->begin();
 
-		$sql = "INSERT INTO ".$this->db->prefix().$this->table_element." (entity, fk_soc, fk_credit_type, balance, tms)";
+		$sql = "INSERT INTO ".$this->db->prefix().$this->table_element." (entity, fk_soc, fk_credit_type, balance, status_balance, fk_facturedet, tms)";
 		$sql .= " VALUES (".((int) $conf->entity).", ".((int) $this->fk_soc).", ".((int) $this->fk_credit_type).", ";
-		$sql .= ((float) $this->balance).", NOW())";
+		$sql .= ((float) $this->balance).",";
+		$sql .= $this->status_balance ? "'" . $this->status_balance . "'," : "APPROVED, ";
+		$sql .= $this->fk_facturedet ? $this->fk_facturedet . "," : "NULL, ";
+		$sql .= " NOW())";
 
 		dol_syslog(get_class($this).'::create', LOG_DEBUG);
 		$resql = $this->db->query($sql);
 		if (!$resql) {
+			echo var_dump($this->db->lasterror());
 			$this->error = $this->db->lasterror();
 			$this->db->rollback();
 			return -1;
@@ -159,19 +175,83 @@ class CreditBalance extends CommonObject
 	 *	@param	User	$user		User making update
 	 *	@return	int					<0 if KO, >0 if OK
 	 */
-	public function update($user)
+	public function update($user, $fromInvoice = false)
 	{
 		global $conf;
 
 		$sql = "UPDATE ".$this->db->prefix().$this->table_element." SET";
 		$sql .= " balance = ".((float) $this->balance).",";
+		$sql .= $fromInvoice ? "fk_credit_type = " .((int) $this->fk_credit_type)."," : '';
 		$sql .= " tms = NOW()";
-		$sql .= " WHERE rowid = ".((int) $this->id);
+		if($fromInvoice) {
+			$sql .= " WHERE fk_facturedet = ".((int) $this->fk_facturedet);
+		} else {
+			$sql .= " WHERE rowid = ".((int) $this->id);
+		}
+		
 		$sql .= " AND entity IN (".getEntity('credits_balance').")";
 
 		dol_syslog(get_class($this).'::update', LOG_DEBUG);
 		$resql = $this->db->query($sql);
 		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+		return 1;
+	}
+
+	public function delete()
+	{
+		global $conf;
+
+		$sql = "DELETE FROM ".$this->db->prefix().$this->table_element." WHERE";
+		$sql .= " fk_facturedet = ".((int) $this->fk_facturedet);
+
+		dol_syslog(get_class($this).'::delete', LOG_DEBUG);
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+		return 1;
+	}
+
+	public function validate($factureId)
+	{
+		$sql = "SELECT rowid";
+		$sql .= " FROM ".$this->db->prefix()."facturedet";
+		$sql .= " WHERE fk_facture = ".((int) $factureId);
+
+		$resql = $this->db->query($sql);
+
+		if ($resql) {
+			while ($obj = $this->db->fetch_object($resql)) {
+				$result = $this->updateFromDraftToApproved($obj->rowid);
+
+				if ($result < 0) {
+					$this->db->free($resql);
+					return -1;
+				}
+			}
+
+			$this->db->free($resql);
+			return 1;
+		} else {
+			dol_syslog(__METHOD__.' Error: '.$this->db->lasterror(), LOG_ERR);
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+	}
+
+	private function updateFromDraftToApproved ($fk_facturedet)
+	{
+		$sql = "UPDATE ".$this->db->prefix().$this->table_element." SET";
+		$sql .= " status_balance = 'APPROVED' ";
+		$sql .= " WHERE fk_facturedet = ".((int) $fk_facturedet);
+
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			echo var_dump($this->db->lasterror());
 			$this->error = $this->db->lasterror();
 			return -1;
 		}

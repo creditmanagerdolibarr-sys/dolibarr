@@ -11,6 +11,7 @@ require_once DOL_DOCUMENT_ROOT.'/core/class/commonhookactions.class.php';
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.form.class.php';
 require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/class/CreditType.class.php';
 require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/class/CreditStatus.class.php';
+require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/class/CreditBalance.class.php';
 require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/class/CreditStatusTypesAndTimesheets.class.php';
 
 class ActionsCreditmanager extends CommonHookActions
@@ -44,7 +45,6 @@ class ActionsCreditmanager extends CommonHookActions
 	{
 		global $langs, $user;
 		$langs->load('creditmanager@creditmanager');
-		echo var_dump($this->userIsStaff($user));
 		if (!$this->isTaskTimeListContext($parameters)) {
 			return 0;
 		}
@@ -293,4 +293,157 @@ class ActionsCreditmanager extends CommonHookActions
 		$resql = $this->db->query($sql);
 		return ($resql && $this->db->num_rows($resql) > 0);
 	}
+	//
+	
+	public function formAddObjectLine($parameters, &$object, &$action, $hookmanager) {
+		$contexts = explode(':', $parameters['context']);
+		if (!in_array('invoicecard', $contexts) && !in_array('invoicecard', $contexts)) return 0;
+
+		// On injecte 2 colonnes directement dans le <tr> existant
+		// Astuce: on ferme le tr précédent et on ouvre le nôtre
+		$inputSelected = $this->renderCreditTypeSelect(GETPOSTINT('credits_types'), 'credits_types');
+		$inputSelected = explode('<!--', $inputSelected)[0];
+		
+		print "<input type='hidden' name='fk_soc' value='$object->socid'>";
+		?>
+		<script>
+		$(document).ready(function(){
+			let arrayOfValueHours = document.querySelectorAll('.cm-h');
+			let creditManagerLineInTable = `
+			<span class="prod_entry_mode_free nowraponall">
+			    <input checked id="cm-radio" class="prod_entry_mode_free" type="checkbox" name="prod_entry_mode" value="Credit Manager">
+				<label>Add hours in Credit Manager</label>
+			</span><br>
+			`;
+			$(creditManagerLineInTable).insertBefore($('#prod_entry_mode_free').parent());
+
+			 //$('table#tablelines tr.liste_titre').find('.linecoldiscount').first();
+			let discount = arrayOfValueHours.length ? $('table#tablelines tr.liste_titre').children().eq(-4) : $('table#tablelines tr.liste_titre').children().eq(-1)
+			$('<td class="chainHours">Hours</td><td class="chainHours">Type de credit</td>').insertBefore(discount);
+			let elt = $('#addline').parent();
+			let inputHours = '<input type="text" name="cm-hours" id="hour" class="flat width40 right chainHours" value="0">';
+			let tdInputHours = '<td id="inputHours" class="nobottom right chainHours">' + inputHours + '</td>';
+			$(tdInputHours).insertBefore(elt);
+			let selectInputType = '<td id="inputCreditType" class="nobottom right chainHours">' + `<?php  echo ($inputSelected);?>` + '</td>';
+			$(selectInputType).insertBefore(elt);
+			
+			
+			$('#cm-radio').click(function() {
+				if ($('#cm-radio').is(':checked')) {
+					$('.chainHours').show();
+				} else {
+					$('.chainHours').hide();
+				}
+			})
+			
+			arrayOfValueHours.forEach((value) => {
+				let previousNode = $(value).parent().next().children().eq(-4);
+				let hours = $(value).children('.cm-h-hours').val();
+				let credit_type = $(value).children('.cm-h-credit-type').val();
+				$('<td>' + hours + '</td><td>' + credit_type + '</td>').insertBefore(previousNode);
+				$(value).hide();
+			})
+			
+		
+		});
+		</script>
+		<?php
+		
+		return 0;
+	}
+
+	public function formEditObjectLine($parameters, &$object, &$action, $hookmanager) {
+		echo var_dump($action);
+		if($action == "editline") {
+			
+			$lineId = GETPOST('lineid', 'int');
+			$balanceAndCreditType = $this->renderBalanceAndRelatedCreditType($lineId);
+			$inputSelected = $this->renderCreditTypeSelect($balanceAndCreditType['idCreditType'], 'credits_types');
+			$inputSelected = explode('<!--', $inputSelected)[0];
+
+		}
+		?>
+		<script>
+			$(document).ready(function(){
+			let arrayOfValueHours = document.querySelectorAll('.cm-h');
+			let creditManagerLineInTable = `
+			<span class="prod_entry_mode_free nowraponall">
+			    <input checked id="cm-radio" class="prod_entry_mode_free" type="checkbox" name="prod_entry_mode" value="Credit Manager">
+				<label>Add hours in Credit Manager</label>
+			</span><br>
+			`;
+			$(creditManagerLineInTable).insertBefore($('#product_desc'));
+
+			let discount = arrayOfValueHours.length ? $('table#tablelines tr.liste_titre').children().eq(-4) : $('table#tablelines tr.liste_titre').children().eq(-1)
+			$('<td class="chainHours">Hours</td><td class="chainHours">Type de credit</td>').insertBefore(discount);
+			let elt = $('#cancellinebutton').parent();
+			
+			$('#cm-radio').click(function() {
+				if ($('#cm-radio').is(':checked')) {
+					$('.chainHours').show();
+				} else {
+					$('.chainHours').hide();
+				}
+			})
+			
+			arrayOfValueHours.forEach((value) => {
+				let previousNode = $(value).parent().next().children().eq(-4);
+				let hours = $(value).children('.cm-h-hours').val();
+				let credit_type = $(value).children('.cm-h-credit-type').val();
+
+				//tredited
+				let parent = $(value).parent().next().attr('class');
+
+				if (parent.match('tredited')) {
+					let inputHours = '<input type="text" name="cm-hours" id="hour" class="flat width40 right chainHours" value="'+hours+'">';
+					let tdInputHours = '<td id="inputHours" class="nobottom right chainHours">' + inputHours + '</td>';
+					$(tdInputHours).insertBefore(elt);
+					let selectInputType = '<td id="inputCreditType" class="nobottom right chainHours">' + `<?php  echo ($inputSelected);?>` + '</td>';
+					$(selectInputType).insertBefore(elt);
+				} else {
+					$('<td>' + hours + '</td><td>' + credit_type + '</td>').insertBefore(previousNode);
+					$(value).hide();
+				}
+				
+			})
+			
+		
+		});
+		</script>
+		<?php
+		return 0;
+	}
+
+	private function renderBalanceAndRelatedCreditType ($lineId) {
+		$balance = new CreditBalance($this->db);
+		
+        $isThisrelatedDataExist = $balance->fetch(null, null, null, $lineId);
+		$correspondingBalance = 'None';
+		$correspondingCreditType = 'None';
+		if ($isThisrelatedDataExist) {
+			$correspondingBalance = $balance->balance;
+			$creditType = new CreditType($this->db);
+			if ($creditType->fetch((int) $balance->fk_credit_type) > 0) {
+				$correspondingCreditType = $creditType->label;
+			}
+			return ['idCreditType' => $balance->fk_credit_type,'labelCreditType'=>$correspondingCreditType, 'balance'=>$correspondingBalance ];
+		}
+		return false;
+	}
+
+	function printObjectLine($parameters, &$object, &$action, $hookmanager)
+    {
+        // Pour afficher la valeur dans chaque ligne du contrat
+        $contexts = explode(':', $parameters['context']);
+		if (!in_array('invoicecard', $contexts) && !in_array('invoicecard', $contexts)) return 0;
+
+		$balanceAndCreditType = $this->renderBalanceAndRelatedCreditType($parameters['line']->id);
+		$correspondingBalance = $balanceAndCreditType['balance'];
+		$correspondingCreditType = $balanceAndCreditType['labelCreditType'];
+
+        print  "<td class='cm-h'><input type='hidden' class='cm-h-hours' value='$correspondingBalance'> <input type='hidden' class='cm-h-credit-type' value='$correspondingCreditType'></td>";
+
+        return 0;
+    }
+	
 }

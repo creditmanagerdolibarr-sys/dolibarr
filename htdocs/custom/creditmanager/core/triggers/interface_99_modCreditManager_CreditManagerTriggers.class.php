@@ -26,6 +26,7 @@ require_once DOL_DOCUMENT_ROOT.'/core/triggers/dolibarrtriggers.class.php';
 require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/class/CreditDebit.class.php';
 require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/class/CreditType.class.php';
 require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/class/CreditStatus.class.php';
+require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/class/CreditBalance.class.php';
 require_once DOL_DOCUMENT_ROOT.'/custom/creditmanager/class/CreditStatusTypesAndTimesheets.class.php';
 
 /**
@@ -202,6 +203,51 @@ class InterfaceCreditManagerTriggers extends DolibarrTriggers
 			}
 			return $result;
 		}
+
+		if ($action == 'LINEBILL_INSERT') {
+			//(entity, fk_soc, fk_credit_type, balance, status_balance, fk_facturedet, tms)
+			$balance = new CreditBalance($this->db);
+			$balance->fk_credit_type = GETPOSTINT('credits_types');
+			$balance->balance = GETPOSTINT('cm-hours');
+			$balance->fk_soc = GETPOSTINT('fk_soc');;
+			$balance->status_balance = "DRAFT";
+			$balance->fk_facturedet = $object->id;
+			if (!$balance->fk_facturedet) {
+				$this->error = "Bill must be attached";
+				return -1;
+			}
+			$balance->create($user);
+		}
+
+		if ($action == 'LINEBILL_MODIFY') {
+			$balance = new CreditBalance($this->db);
+			$balance->balance = GETPOSTINT('cm-hours');
+			$balance->fk_credit_type = GETPOSTINT('credits_types');
+			$balance->fk_facturedet = $object->id;
+			if (!$balance->fk_facturedet) {
+				$this->error = "Bill must be attached";
+				return -1;
+			}
+			$balance->update($user, true);
+		}
+
+		if ($action == 'LINEBILL_DELETE') {
+			$balance = new CreditBalance($this->db);
+			$balance->fk_facturedet = $object->id;
+			if (!$balance->fk_facturedet) {
+				$this->error = "Bill must be attached";
+				return -1;
+			}
+			$balance->delete();
+		}
+
+		/*if($action == 'BILL_VALIDATE ') {
+			echo var_dump("franck");
+			echo var_dump($object->id);
+			$balance = new CreditBalance($this->db);
+			/*$factureId = $object->id;
+			$balance->validate($factureId);
+		}*/
 
 		return 0;
 	}
