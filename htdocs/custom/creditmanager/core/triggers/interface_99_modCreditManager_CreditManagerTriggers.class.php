@@ -241,13 +241,17 @@ class InterfaceCreditManagerTriggers extends DolibarrTriggers
 			$balance->delete();
 		}
 
-		/*if($action == 'BILL_VALIDATE ') {
-			echo var_dump("franck");
-			echo var_dump($object->id);
+		if($action == 'BILL_VALIDATE') {
 			$balance = new CreditBalance($this->db);
-			/*$factureId = $object->id;
+			$factureId = $object->id;
 			$balance->validate($factureId);
-		}*/
+		}
+
+		if($action == 'BILL_UNVALIDATE') {
+			$balance = new CreditBalance($this->db);
+			$factureId = $object->id;
+			$balance->validate($factureId, false);
+		}
 
 		return 0;
 	}

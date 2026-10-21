@@ -216,7 +216,7 @@ class CreditBalance extends CommonObject
 		return 1;
 	}
 
-	public function validate($factureId)
+	public function validate($factureId, $toBevalidate = true)
 	{
 		$sql = "SELECT rowid";
 		$sql .= " FROM ".$this->db->prefix()."facturedet";
@@ -226,7 +226,7 @@ class CreditBalance extends CommonObject
 
 		if ($resql) {
 			while ($obj = $this->db->fetch_object($resql)) {
-				$result = $this->updateFromDraftToApproved($obj->rowid);
+				$result = $this->updateFromDraftToApproved($obj->rowid, $toBevalidate);
 
 				if ($result < 0) {
 					$this->db->free($resql);
@@ -243,10 +243,10 @@ class CreditBalance extends CommonObject
 		}
 	}
 
-	private function updateFromDraftToApproved ($fk_facturedet)
+	private function updateFromDraftToApproved ($fk_facturedet, $toBevalidate)
 	{
 		$sql = "UPDATE ".$this->db->prefix().$this->table_element." SET";
-		$sql .= " status_balance = 'APPROVED' ";
+		$sql .= $toBevalidate ? " status_balance = 'APPROVED' " : " status_balance = 'DRAFT' ";
 		$sql .= " WHERE fk_facturedet = ".((int) $fk_facturedet);
 
 		$resql = $this->db->query($sql);

@@ -30,7 +30,6 @@ class ActionsCreditmanager extends CommonHookActions
 	{
 		global $langs, $user;
 		$langs->load('creditmanager@creditmanager');
-
 		if (!$this->isTaskTimeListContext($parameters)) {
 			return 0;
 		}
@@ -293,14 +292,11 @@ class ActionsCreditmanager extends CommonHookActions
 		$resql = $this->db->query($sql);
 		return ($resql && $this->db->num_rows($resql) > 0);
 	}
-	//
 	
 	public function formAddObjectLine($parameters, &$object, &$action, $hookmanager) {
 		$contexts = explode(':', $parameters['context']);
 		if (!in_array('invoicecard', $contexts) && !in_array('invoicecard', $contexts)) return 0;
 
-		// On injecte 2 colonnes directement dans le <tr> existant
-		// Astuce: on ferme le tr précédent et on ouvre le nôtre
 		$inputSelected = $this->renderCreditTypeSelect(GETPOSTINT('credits_types'), 'credits_types');
 		$inputSelected = explode('<!--', $inputSelected)[0];
 		
@@ -308,18 +304,18 @@ class ActionsCreditmanager extends CommonHookActions
 		?>
 		<script>
 		$(document).ready(function(){
-			let arrayOfValueHours = document.querySelectorAll('.cm-h');
+			/*let arrayOfValueHours = document.querySelectorAll('.cm-h');
 			let creditManagerLineInTable = `
 			<span class="prod_entry_mode_free nowraponall">
 			    <input checked id="cm-radio" class="prod_entry_mode_free" type="checkbox" name="prod_entry_mode" value="Credit Manager">
 				<label>Add hours in Credit Manager</label>
 			</span><br>
 			`;
-			$(creditManagerLineInTable).insertBefore($('#prod_entry_mode_free').parent());
+			$(creditManagerLineInTable).insertBefore($('table#tablelines').parent());*/
 
-			 //$('table#tablelines tr.liste_titre').find('.linecoldiscount').first();
-			let discount = arrayOfValueHours.length ? $('table#tablelines tr.liste_titre').children().eq(-4) : $('table#tablelines tr.liste_titre').children().eq(-1)
-			$('<td class="chainHours">Hours</td><td class="chainHours">Type de credit</td>').insertBefore(discount);
+
+			/*let discount = arrayOfValueHours.length ? $('table#tablelines tr.liste_titre').children().eq(-4) : $('table#tablelines tr.liste_titre').children().eq(-1)
+			$('<td class="chainHours">Hours</td><td class="chainHours">Type de credit</td>').insertBefore(discount);*/
 			let elt = $('#addline').parent();
 			let inputHours = '<input type="text" name="cm-hours" id="hour" class="flat width40 right chainHours" value="0">';
 			let tdInputHours = '<td id="inputHours" class="nobottom right chainHours">' + inputHours + '</td>';
@@ -328,7 +324,7 @@ class ActionsCreditmanager extends CommonHookActions
 			$(selectInputType).insertBefore(elt);
 			
 			
-			$('#cm-radio').click(function() {
+			/*$('#cm-radio').click(function() {
 				if ($('#cm-radio').is(':checked')) {
 					$('.chainHours').show();
 				} else {
@@ -340,9 +336,9 @@ class ActionsCreditmanager extends CommonHookActions
 				let previousNode = $(value).parent().next().children().eq(-4);
 				let hours = $(value).children('.cm-h-hours').val();
 				let credit_type = $(value).children('.cm-h-credit-type').val();
-				$('<td>' + hours + '</td><td>' + credit_type + '</td>').insertBefore(previousNode);
+				$('<td class="chainHours">' + hours + '</td><td class="chainHours">' + credit_type + '</td>').insertBefore(previousNode);
 				$(value).hide();
-			})
+			})*/
 			
 		
 		});
@@ -353,7 +349,9 @@ class ActionsCreditmanager extends CommonHookActions
 	}
 
 	public function formEditObjectLine($parameters, &$object, &$action, $hookmanager) {
-		echo var_dump($action);
+		$contexts = explode(':', $parameters['context']);
+		if (!in_array('invoicecard', $contexts) && !in_array('invoicecard', $contexts)) return 0;
+
 		if($action == "editline") {
 			
 			$lineId = GETPOST('lineid', 'int');
@@ -365,7 +363,7 @@ class ActionsCreditmanager extends CommonHookActions
 		?>
 		<script>
 			$(document).ready(function(){
-			let arrayOfValueHours = document.querySelectorAll('.cm-h');
+			/*let arrayOfValueHours = document.querySelectorAll('.cm-h');
 			let creditManagerLineInTable = `
 			<span class="prod_entry_mode_free nowraponall">
 			    <input checked id="cm-radio" class="prod_entry_mode_free" type="checkbox" name="prod_entry_mode" value="Credit Manager">
@@ -375,18 +373,18 @@ class ActionsCreditmanager extends CommonHookActions
 			$(creditManagerLineInTable).insertBefore($('#product_desc'));
 
 			let discount = arrayOfValueHours.length ? $('table#tablelines tr.liste_titre').children().eq(-4) : $('table#tablelines tr.liste_titre').children().eq(-1)
-			$('<td class="chainHours">Hours</td><td class="chainHours">Type de credit</td>').insertBefore(discount);
+			$('<td class="chainHours">Hours</td><td class="chainHours">Type de credit</td>').insertBefore(discount);*/
 			let elt = $('#cancellinebutton').parent();
 			
-			$('#cm-radio').click(function() {
+			/*$('#cm-radio').click(function() {
 				if ($('#cm-radio').is(':checked')) {
 					$('.chainHours').show();
 				} else {
 					$('.chainHours').hide();
 				}
-			})
+			})*/
 			
-			arrayOfValueHours.forEach((value) => {
+			document.querySelectorAll('.cm-h').forEach((value) => {
 				let previousNode = $(value).parent().next().children().eq(-4);
 				let hours = $(value).children('.cm-h-hours').val();
 				let credit_type = $(value).children('.cm-h-credit-type').val();
@@ -417,7 +415,7 @@ class ActionsCreditmanager extends CommonHookActions
 	private function renderBalanceAndRelatedCreditType ($lineId) {
 		$balance = new CreditBalance($this->db);
 		
-        $isThisrelatedDataExist = $balance->fetch(null, null, null, $lineId);
+        $isThisrelatedDataExist = $balance->fetch(null, null, null, $lineId, true);
 		$correspondingBalance = 'None';
 		$correspondingCreditType = 'None';
 		if ($isThisrelatedDataExist) {
@@ -441,9 +439,60 @@ class ActionsCreditmanager extends CommonHookActions
 		$correspondingBalance = $balanceAndCreditType['balance'];
 		$correspondingCreditType = $balanceAndCreditType['labelCreditType'];
 
-        print  "<td class='cm-h'><input type='hidden' class='cm-h-hours' value='$correspondingBalance'> <input type='hidden' class='cm-h-credit-type' value='$correspondingCreditType'></td>";
-
+        print  "<td class='cm-h' style='display: none'><input type='hidden' class='cm-h-hours' value='$correspondingBalance'> <input type='hidden' class='cm-h-credit-type' value='$correspondingCreditType'></td>";
         return 0;
     }
+
+	function formObjectOptions($parameters, &$object, &$action, $hookmanager) {
+		$contexts = explode(':', $parameters['context']);
+		if (!in_array('invoicecard', $contexts) && !in_array('invoicecard', $contexts)) return 0;
+		
+		?>
+		<script>
+			$(document).ready(function() {
+				let arrayOfValueHours = document.querySelectorAll('.cm-h');
+				let creditManagerLineInTable = `
+				<span class="prod_entry_mode_free nowraponall">
+					<input checked id="cm-radio" class="prod_entry_mode_free" type="checkbox" name="prod_entry_mode" value="Credit Manager">
+					<label>Add hours in Credit Manager</label>
+				</span><br>
+				`;
+				$(creditManagerLineInTable).insertBefore($('table#tablelines').parent());
+				//
+				let discount = arrayOfValueHours.length ? $('table#tablelines tr.liste_titre').children().eq(-4) : $('table#tablelines tr.liste_titre').children().eq(-1)
+				$('<td class="chainHours">Hours</td><td class="chainHours">Type de credit</td>').insertBefore(discount);
+				$('#cm-radio').click(function() {
+					if ($('#cm-radio').is(':checked')) {
+						$('.chainHours').show();
+					} else {
+						$('.chainHours').hide();
+					}
+				})
+				//if($('.tredited').length) {}
+				console.log(($('.tredited').length));
+				if (! (($('.tredited').length))) {
+					arrayOfValueHours.forEach((value) => {
+						let previousNode = $(value).parent().next().children().eq(-4);
+						let hours = $(value).children('.cm-h-hours').val();
+						let credit_type = $(value).children('.cm-h-credit-type').val();
+
+						//tredited
+						let parent = $(value).parent().next().attr('class');
+
+						if (parent.match('tredited')) {
+							//test($('#cancellinebutton').parent());
+						} else {
+							$('<td class="chainHours">' + hours + '</td><td class="chainHours">' + credit_type + '</td>').insertBefore(previousNode);
+							$(value).hide();
+						}
+						
+					})
+				}
+				
+			})
+		</script>
+		<?php
+		return 0;
+	}
 	
 }

@@ -102,6 +102,7 @@ function creditmanager_balance_list_where($db, $search_socid, $search_credit_typ
 
 	$sql = " WHERE b.entity IN (".$entityBalance.")";
 	$sql .= " AND s.entity IN (".$entitySoc.")";
+	$sql .= " AND b.status_balance = 'APPROVED'";
 	$sql .= " AND t.entity IN (".$entityType.")";
 	$sql .= " AND t.active = 1";
 
